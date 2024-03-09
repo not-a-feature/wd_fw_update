@@ -75,12 +75,22 @@ def setup_logging(loglevel):
 
 
 def check_missing_dependencies():
+    """Check for missing dependencies
+
+    Returns:
+      bool: True if any dependency is missing, False otherwise
+    """
     dependencies = ["nvme"]  # List of commands to check
 
     return any(which(cmd) is None for cmd in dependencies)
 
 
 def ask_device():
+    """Prompt the user to select an NVME drive for the update
+
+    Returns:
+      str: Selected NVME drive
+    """
     result = subprocess.run(
         ["nvme", "list"],
         shell=False,
@@ -102,6 +112,14 @@ def ask_device():
 
 
 def get_model_properties(device):
+    """Retrieve model properties for the specified NVME device
+
+    Args:
+      device (str): NVME device identifier
+
+    Returns:
+      dict: Model properties
+    """
     result = subprocess.run(
         ["sudo", "nvme", "id-ctrl", device],
         shell=False,
@@ -117,6 +135,14 @@ def get_model_properties(device):
 
 
 def get_fw_url(model):
+    """Fetch firmware URL for the specified model from the device list
+
+    Args:
+      model (str): Model name
+
+    Returns:
+      list: List of firmware URLs
+    """
     response = requests.get(DEVICE_LIST_URL)
     response.raise_for_status()
 
@@ -129,6 +155,16 @@ def get_fw_url(model):
 
 
 def ask_fw_version(relative_urls, model, current_fw_version):
+    """Prompt the user to select a firmware version
+
+    Args:
+      relative_urls (list): List of firmware URLs
+      model (str): Model name
+      current_fw_version (str): Current firmware version
+
+    Returns:
+      str: Selected firmware version
+    """
     if not relative_urls:
         raise RuntimeWarning("No Firmware Version to select.")
 
@@ -157,6 +193,14 @@ def ask_fw_version(relative_urls, model, current_fw_version):
 
 
 def ask_slot(device):
+    """Prompt the user to select a firmware slot
+
+    Args:
+      device (str): NVME device identifier
+
+    Returns:
+      int, int: Current active firmware slot, Selected firmware slot
+    """
     result = subprocess.run(
         ["sudo", "nvme", "fw-log", device, "--output-format=normal"],
         shell=False,
@@ -189,6 +233,11 @@ def ask_slot(device):
 
 
 def ask_mode():
+    """Prompt the user to select the firmware update mode
+
+    Returns:
+      int: Selected update mode
+    """
     o0 = "0 Downloaded image replaces the image indicated by the Firmware Slot field. This image is not activated."
     o1 = "1 Downloaded image replaces the image indicated by the Firmware Slot field. This image is activated at the next reset."
     o2 = "2 The image indicated by the Firmware Slot field is activated at the next reset."
@@ -210,7 +259,20 @@ def ask_mode():
 
 
 def update_fw(version, current_fw_version, model, device, current_slot, slot, mode):
+    """Update firmware for the specified NVME device
 
+    Args:
+      version (str): Firmware version to be installed
+      current_fw_version (str): Current firmware version
+      model (str): Model name
+      device (str): NVME device identifier
+      current_slot (int): Current active firmware slot
+      slot (int): Selected firmware slot
+      mode (int): Selected update mode
+
+    Returns:
+      tuple: Success status (bool), Updated firmware slot (int)
+    """
     # Get FW properties
     model = model.replace(" ", "_")
     prop_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{version}/device_properties.xml"
@@ -303,8 +365,11 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
 
 
 def wd_fw_update(device=None):
-    """Updates the firmware of Western Digital SSDs on Ubuntu / Linux Mint."""
+    """Updates the firmware of Western Digital SSDs on Ubuntu / Linux Mint.
 
+    Args:
+      device (str, optional): NVME device identifier. If not provided, the user will be prompted to select one.
+    """
     # Step 0: Check dependencies
     if check_missing_dependencies():
         print("Missing dependencies!")
@@ -335,10 +400,9 @@ def wd_fw_update(device=None):
     current_slot, slot = ask_slot(device)
 
     # Step 5: Ask for installation mode
-
     mode = ask_mode()
 
-    # Step 5: Download and install the firmware file
+    # Step 6: Download and install the firmware file
     result, mode = update_fw(
         version=selected_version,
         current_fw_version=current_fw_version,
