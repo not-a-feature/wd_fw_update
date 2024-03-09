@@ -74,4 +74,4 @@ TLDR:
  | ✓ Patent use     | State changes                |             |
  | ✓ Private use    |                              |             |
 
-Go to [LICENSE.md](https://github.com/not-a-feature/wd_fw_update/blob/main/LICENSE) to see the full version.
+Go to [LICENSE](https://github.com/not-a-feature/wd_fw_update/blob/main/LICENSE) to see the full version.
