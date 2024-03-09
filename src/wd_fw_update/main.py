@@ -91,6 +91,8 @@ def ask_device():
     Returns:
       str: Selected NVME drive
     """
+    _logger.debug("Getting device list.")
+
     result = subprocess.run(
         ["nvme", "list"],
         shell=False,
@@ -99,6 +101,7 @@ def ask_device():
     )
     devices = [d.split(" ", 1)[0] for d in result.stdout.split("\n")[2:] if d]
 
+    _logger.debug(f"Asking for device: {devices}")
     questions = [
         inquirer.List(
             "device",
@@ -120,12 +123,15 @@ def get_model_properties(device):
     Returns:
       dict: Model properties
     """
+    _logger.debug("Getting device properties.")
+
     result = subprocess.run(
         ["sudo", "nvme", "id-ctrl", device],
         shell=False,
         capture_output=True,
         text=True,
     )
+
     model_properties = {}
     for line in result.stdout.split("\n")[1:]:
         if ":" in line:
@@ -143,6 +149,8 @@ def get_fw_url(model):
     Returns:
       list: List of firmware URLs
     """
+    _logger.debug("Getting firmware url.")
+
     response = requests.get(DEVICE_LIST_URL)
     response.raise_for_status()
 
@@ -169,6 +177,7 @@ def ask_fw_version(relative_urls, model, current_fw_version):
         raise RuntimeWarning("No Firmware Version to select.")
 
     fw_versions = [v for url in relative_urls if not (v := url.split("/")[3]) == current_fw_version]
+    _logger.debug(f"Firmware versions: f{fw_versions}")
 
     if not fw_versions:
         print("No different / newer firmware version found.")
@@ -176,6 +185,8 @@ def ask_fw_version(relative_urls, model, current_fw_version):
         exit(0)
 
     if len(fw_versions) == 1:
+        _logger.debug("Only one firmware to select, skipping user-promt.")
+
         version = fw_versions[0]
 
     else:
@@ -214,8 +225,11 @@ def ask_slot(device):
     print(f"Current Active Firmware Slot (afi): {current_slot}")
 
     slots = [s[3:] for s in sorted(result[2:10]) if s]
-    print(slots)
+    _logger.debug(f"Firmware slots: {slots}")
+
     if len(slots) == 1:
+        _logger.debug("Only one slot to select, skipping user-promt.")
+
         return int(slots[0].split(":")[0])  # Should always be 1
 
     print("Select the firmware slot.")
@@ -277,11 +291,15 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
     model = model.replace(" ", "_")
     prop_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{version}/device_properties.xml"
 
+    _logger.debug(f"Firmware properties url: {prop_url}")
+
     response = requests.get(prop_url)
     response.raise_for_status()
 
     root = ET.fromstring(response.content)
     dependencies_list = [dep.text for dep in root.findall("dependency")]
+
+    _logger.debug(f"Firmware dependencies: {dependencies_list}")
 
     # Check if current firmware is in dependencies
     if current_fw_version not in dependencies_list:
@@ -289,6 +307,9 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
         raise RuntimeError(f"Please upgrade to one of these versions first: {dependencies_list}")
 
     firmware_url = f"{prop_url}{root.findtext('fwfile')}"
+
+    _logger.debug(f"Firmware file url: {firmware_url}")
+    _logger.info("Downloading firmware.")
 
     r = requests.get(firmware_url, stream=True)
     total_size = int(r.headers.get("content-length", 0))
@@ -310,14 +331,15 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
 
         fw_file.close()  # Close, but keep the temporary file.
 
+        print()
         print("========== Summary ==========")
         print(f"NVME location:    {device}")
         print(f"Model:            {model}")
         print(f"Firmware Version: {current_fw_version} --> {version}")
         if mode:
             print(f"Firmware Slot:    {current_slot} --> {slot}")
-        print(f"Activation Mode:  {mode}\n")
-        print(f"Temporary File:   {fw_file.name}")
+        print(f"Activation Mode:  {mode}")
+        print(f"Temporary File:   {fw_file.name}\n\n")
 
         questions = [
             inquirer.Confirm("continue", message="The summary is correct. Continue", default=True),
@@ -328,6 +350,8 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
         if not answer:
             print("Aborted.")
             exit(1)
+
+        _logger.info("Loading the firmware file.")
 
         result = subprocess.run(
             [
@@ -341,7 +365,9 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
             capture_output=True,
             text=True,
         )
+        _logger.debug(f"NVME Download returncode: {result.returncode}")
 
+        _logger.info("Commiting / Switching to the firmware file.")
         result = subprocess.run(
             [
                 "sudo",
@@ -355,6 +381,7 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
             capture_output=True,
             text=True,
         )
+        _logger.debug(f"NVME Commit returncode: {result.returncode}")
 
     if result.returncode == 0:
         success = True
@@ -368,6 +395,7 @@ def wd_fw_update():
     """Updates the firmware of Western Digital SSDs on Ubuntu / Linux Mint.
     The user will be prompted for version / model / slot selection.
     """
+    _logger.info("Starting firmware update process.")
     # Step 0: Check dependencies
     if check_missing_dependencies():
         print("Missing dependencies!")
@@ -420,6 +448,8 @@ def wd_fw_update():
     else:
         print("An error happened during the update process.")
         raise RuntimeError("Please try again with caution.")
+
+    _logger.info("Firmware update process completed.")
 
 
 def main(args):
