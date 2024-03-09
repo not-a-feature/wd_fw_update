@@ -25,12 +25,12 @@ Clone the repository:
 git clone https://github.com/not-a-feature/wd_fw_update.git
 cd wd_fw_update
 
-pip install -r requirements.txt
 pip install .
 ```
 
 ### Via pypi:
 The newest release is published on pypi.
+
 ```bash
 pip install wd-fw-update
 ```
@@ -54,6 +54,12 @@ Depending on the update mode, it may prompt you to reboot or switch to the new s
 
 This project has been set up using PyScaffold 4.5. For details and usage
 information on PyScaffold see https://pyscaffold.org/.
+
+## Dependencies
+- [nvme cli](https://github.com/linux-nvme/nvme-cli)
+- [inquirer](https://pypi.org/project/inquirer/)
+- [tqdm](https://pypi.org/project/tqdm/)
+- [requests](https://pypi.org/project/requests/)
 
 ## License
 Copyright (C) 2024 by Jules Kreuer - @not_a_feature
