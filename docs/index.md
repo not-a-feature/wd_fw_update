@@ -1,4 +1,4 @@
-# Western Digital SSD Firmware Update Tool
+# wd_fw_update
 
 <img alt="Western Digital SSD Firmware Update Tool" src=https://github.com/not-a-feature/wd_fw_update/raw/main/logo.png height=90>
 
