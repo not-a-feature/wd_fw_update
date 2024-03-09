@@ -39,7 +39,7 @@ def parse_args(args):
         action="version",
         version=f"wd_fw_update {__version__}",
     )
-    parser.add_argument(dest="n", help="n-th Fibonacci number", type=int, metavar="INT")
+
     parser.add_argument(
         "-v",
         "--verbose",
@@ -364,11 +364,9 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
     return success, mode
 
 
-def wd_fw_update(device=None):
+def wd_fw_update():
     """Updates the firmware of Western Digital SSDs on Ubuntu / Linux Mint.
-
-    Args:
-      device (str, optional): NVME device identifier. If not provided, the user will be prompted to select one.
+    The user will be prompted for version / model / slot selection.
     """
     # Step 0: Check dependencies
     if check_missing_dependencies():
@@ -378,8 +376,7 @@ def wd_fw_update(device=None):
         exit(1)
 
     # Step 1: Get model number and firmware version
-    if device is None:
-        device = ask_device()
+    device = ask_device()
 
     model_properties = get_model_properties(device)
 
@@ -435,13 +432,11 @@ def main(args):
       args (List[str]): command line parameters as list of strings
           (for example  ``["--verbose", "--help"]``).
     """
-    # args = parse_args(args)
-    # setup_logging(args.loglevel)
-    # _logger.debug(args)
+    args = parse_args(args)
+    setup_logging(args.loglevel)
+    _logger.debug(args)
 
-    print(args)
-    device = "/dev/nvme0n1"
-    wd_fw_update(device=device)
+    wd_fw_update()
 
     _logger.info("[END of script]")
 
