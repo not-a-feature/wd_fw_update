@@ -80,7 +80,7 @@ def check_missing_dependencies():
     Returns:
       bool: True if any dependency is missing, False otherwise
     """
-    dependencies = ["nvme"]  # List of commands to check
+    dependencies = ["sudo", "nvme"]  # List of commands to check
 
     return any(which(cmd) is None for cmd in dependencies)
 
@@ -396,10 +396,13 @@ def wd_fw_update():
     The user will be prompted for version / model / slot selection.
     """
     _logger.info("Starting firmware update process.")
+    print("Western Digital SSD Firmware Update Tool\n")
+
     # Step 0: Check dependencies
     if check_missing_dependencies():
         print("Missing dependencies!")
         print("Please install: ")
+        print("   sudo")
         print("   nvme-cli")
         exit(1)
 
