@@ -40,7 +40,8 @@ pip install wd-fw-update
 ## Usage
 
 Run
-``bash
+
+```bash
 wd_fw_update
 ```
 
