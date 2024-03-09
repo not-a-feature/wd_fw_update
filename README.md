@@ -3,7 +3,8 @@
 [![Conda-Forge](https://img.shields.io/conda/vn/conda-forge/wd_fw_update.svg)](https://anaconda.org/conda-forge/wd_fw_update)
 [![Monthly Downloads](https://pepy.tech/badge/wd_fw_update/month)](https://pepy.tech/project/wd_fw_update)
 
-# Western Digital SSD Firmware Update Tool
+# wd_fw_update
+<img alt="Western Digital SSD Firmware Update Tool" src=https://github.com/not-a-feature/wd_fw_update/raw/main/logo.png height=90>
 
 This is a firmware update tool for Western Digital SSDs on Ubuntu / Linux Mint.
 It provides a user-friendly interface to select the firmware version for the update process.

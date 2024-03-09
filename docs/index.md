@@ -1,18 +1,11 @@
-# wd_fw_update
+# Western Digital SSD Firmware Update Tool
 
-Add a short description here!
+<img alt="Western Digital SSD Firmware Update Tool" src=https://github.com/not-a-feature/wd_fw_update/raw/main/logo.png height=90>
 
+This is a firmware update tool for Western Digital SSDs on Ubuntu / Linux Mint.
+It provides a user-friendly interface to select the firmware version for the update process.
 
-## Note
-
-> This is the main page of your project's [Sphinx] documentation. It is
-> formatted in [Markdown]. Add additional pages by creating md-files in
-> `docs` or rst-files (formatted in [reStructuredText]) and adding links to
-> them in the `Contents` section below.
->
-> Please check [Sphinx] and [MyST] for more information
-> about how to document your project and how to configure your preferences.
-
+It uses the Western Digital API and the NVME toolbox `nvme-cli`.
 
 ## Contents
 
