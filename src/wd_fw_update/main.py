@@ -1,7 +1,16 @@
 import argparse
 import logging
+import subprocess
 import sys
+import xml.etree.ElementTree as ET
+from shutil import which
+from tempfile import NamedTemporaryFile
 
+import inquirer
+import requests
+from tqdm.auto import tqdm
+
+from wd_fw_update import __name__ as package_name
 from wd_fw_update import __version__
 
 __author__ = "Jules Kreuer"
@@ -9,6 +18,9 @@ __copyright__ = "Jules Kreuer"
 __license__ = "GPL-3.0-or-later"
 
 _logger = logging.getLogger(__name__)
+
+BASE_WD_DOMAIN = "https://wddashboarddownloads.wdc.com/wdDashboard"
+DEVICE_LIST_URL = f"{BASE_WD_DOMAIN}/config/devices/lista_devices.xml"
 
 
 def parse_args(args):
@@ -62,40 +74,291 @@ def setup_logging(loglevel):
     )
 
 
-def check_dependencies():
-    return
+def check_missing_dependencies():
+    dependencies = ["nvme"]  # List of commands to check
+
+    return any(which(cmd) is None for cmd in dependencies)
 
 
-def get_model():
-    return
+def ask_device():
+    result = subprocess.run(
+        ["nvme", "list"],
+        shell=False,
+        capture_output=True,
+        text=True,
+    )
+    devices = [d.split(" ", 1)[0] for d in result.stdout.split("\n")[2:] if d]
+
+    questions = [
+        inquirer.List(
+            "device",
+            message="Select the NVME drive you want to update",
+            choices=devices,
+            carousel=True,
+        ),
+    ]
+    device = inquirer.prompt(questions)["device"]
+    return device
 
 
-def get_fw_url():
-    return
+def get_model_properties(device):
+    result = subprocess.run(
+        ["sudo", "nvme", "id-ctrl", device],
+        shell=False,
+        capture_output=True,
+        text=True,
+    )
+    model_properties = {}
+    for line in result.stdout.split("\n")[1:]:
+        if ":" in line:
+            k, v = line.split(":", 1)
+            model_properties[k.strip()] = v.strip()
+    return model_properties
 
 
-def download_fw():
-    return
+def get_fw_url(model):
+    response = requests.get(DEVICE_LIST_URL)
+    response.raise_for_status()
+
+    root = ET.fromstring(response.content)
+    for device in root.findall("lista_device"):
+        if device.get("model") == model:
+            return [u.text for u in device.findall("url")]
+
+    raise RuntimeError("No Firmware found for this model. Please check your selection / model.")
 
 
-def update_fw():
-    return
+def ask_fw_version(relative_urls, model, current_fw_version):
+    if not relative_urls:
+        raise RuntimeWarning("No Firmware Version to select.")
+
+    fw_versions = [v for url in relative_urls if not (v := url.split("/")[3]) == current_fw_version]
+
+    if not fw_versions:
+        print("No different / newer firmware version found.")
+        print("You are probably already on the latest version.")
+        exit(0)
+
+    if len(fw_versions) == 1:
+        version = fw_versions[0]
+
+    else:
+        questions = [
+            inquirer.List(
+                "version",
+                message=f"Select the Firmware Version for {model}",
+                choices=fw_versions,
+                carousel=True,
+            ),
+        ]
+        version = inquirer.prompt(questions)["version"]
+
+    return version
 
 
-def wd_fw_update():
+def ask_slot(device):
+    result = subprocess.run(
+        ["sudo", "nvme", "fw-log", device, "--output-format=normal"],
+        shell=False,
+        capture_output=True,
+        text=True,
+    )
+
+    result = result.stdout.split("\n")
+    print(result)
+    current_slot = int(result[1].split(":")[1], 0)
+    print(f"Current Active Firmware Slot (afi): {current_slot}")
+
+    slots = [s[3:] for s in sorted(result[2:10]) if s]
+    print(slots)
+    if len(slots) == 1:
+        return int(slots[0].split(":")[0])  # Should always be 1
+
+    print("Select the firmware slot.")
+    questions = [
+        inquirer.List(
+            "slot",
+            message="Slot ID: Current Firmware Version",
+            choices=slots,
+            carousel=True,
+        ),
+    ]
+    slot = inquirer.prompt(questions)["slot"]
+    slot = int(slot.split(":", 1)[0])
+    return current_slot, slot
+
+
+def ask_mode():
+    o0 = "0 Downloaded image replaces the image indicated by the Firmware Slot field. This image is not activated."
+    o1 = "1 Downloaded image replaces the image indicated by the Firmware Slot field. This image is activated at the next reset."
+    o2 = "2 The image indicated by the Firmware Slot field is activated at the next reset."
+    o3 = "3 The image specified by the Firmware Slot field is requested to be activated immediately without reset."
+
+    modes = [o0, o1, o2, o3]
+    questions = [
+        inquirer.List(
+            "mode",
+            message="Select update action, Mode 2 is recommended",
+            choices=modes,
+            default=o2,
+            carousel=True,
+        ),
+    ]
+    mode = inquirer.prompt(questions)["mode"]
+    mode = int(mode.split(" ", 1)[0])
+    return mode
+
+
+def update_fw(version, current_fw_version, model, device, current_slot, slot, mode):
+
+    # Get FW properties
+    model = model.replace(" ", "_")
+    prop_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{version}/device_properties.xml"
+
+    response = requests.get(prop_url)
+    response.raise_for_status()
+
+    root = ET.fromstring(response.content)
+    dependencies_list = [dep.text for dep in root.findall("dependency")]
+
+    # Check if current firmware is in dependencies
+    if current_fw_version not in dependencies_list:
+        print("Current firmware version is not in the dependencies.")
+        raise RuntimeError(f"Please upgrade to one of these versions first: {dependencies_list}")
+
+    firmware_url = f"{prop_url}{root.findtext('fwfile')}"
+
+    r = requests.get(firmware_url, stream=True)
+    total_size = int(r.headers.get("content-length", 0))
+
+    with NamedTemporaryFile(
+        prefix=package_name,
+        suffix=".fluf",
+        mode="wb",
+        delete_on_close=False,
+    ) as fw_file, tqdm(
+        total=total_size,
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as pbar:
+        for data in r.iter_content(1024):
+            pbar.update(len(data))
+            fw_file.write(data)
+
+        fw_file.close()  # Close, but keep the temporary file.
+
+        print("========== Summary ==========")
+        print(f"NVME location:    {device}")
+        print(f"Model:            {model}")
+        print(f"Firmware Version: {current_fw_version} --> {version}")
+        if mode:
+            print(f"Firmware Slot:    {current_slot} --> {slot}")
+        print(f"Activation Mode:  {mode}\n")
+        print(f"Temporary File:   {fw_file.name}")
+
+        questions = [
+            inquirer.Confirm("continue", message="The summary is correct. Continue", default=True),
+        ]
+
+        answer = inquirer.prompt(questions)["continue"]
+
+        if not answer:
+            print("Aborted.")
+            exit(1)
+
+        result = subprocess.run(
+            [
+                "sudo",
+                "nvme",
+                "download",
+                fw_file.name,
+                device,
+            ],
+            shell=False,
+            capture_output=True,
+            text=True,
+        )
+
+        result = subprocess.run(
+            [
+                "sudo",
+                "nvme",
+                "fw-commit",
+                f"-s {slot}",
+                f"-a {mode}",
+                device,
+            ],
+            shell=False,
+            capture_output=True,
+            text=True,
+        )
+
+    if result.returncode == 0:
+        success = True
+    else:
+        success = False
+
+    return success, mode
+
+
+def wd_fw_update(device=None):
     """Updates the firmware of Western Digital SSDs on Ubuntu / Linux Mint."""
 
     # Step 0: Check dependencies
+    if check_missing_dependencies():
+        print("Missing dependencies!")
+        print("Please install: ")
+        print("   nvme-cli")
+        exit(1)
 
     # Step 1: Get model number and firmware version
+    if device is None:
+        device = ask_device()
+
+    model_properties = get_model_properties(device)
 
     # Step 2: Fetch the device list and find the firmware URL
+    model = model_properties["mn"]
+    relative_urls = get_fw_url(model=model)
 
-    # Step 3: Check firmware version dependencies
+    # Step 3: Check firmware version and dependencies
+    current_fw_version = model_properties["fr"]
 
-    # Step 4: Download firmware file
+    selected_version = ask_fw_version(
+        relative_urls,
+        model=model,
+        current_fw_version=current_fw_version,
+    )
 
-    # Step 5: Update the firmware
+    # Step 4: Ask for the slot to install the firmware
+    current_slot, slot = ask_slot(device)
+
+    # Step 5: Ask for installation mode
+
+    mode = ask_mode()
+
+    # Step 5: Download and install the firmware file
+    result, mode = update_fw(
+        version=selected_version,
+        current_fw_version=current_fw_version,
+        model=model,
+        device=device,
+        current_slot=current_slot,
+        slot=slot,
+        mode=mode,
+    )
+
+    if result:
+        if mode == 0:
+            print("Update complete. Don't forget to switch to the new slot.")
+        elif mode == 1 or mode == 2:
+            print("Update complete. Please reboot.")
+        elif mode == 3:
+            print("Update complete. Switched to the new version.")
+    else:
+        print("An error happened during the update process.")
+        raise RuntimeError("Please try again with caution.")
 
 
 def main(args):
@@ -108,11 +371,13 @@ def main(args):
       args (List[str]): command line parameters as list of strings
           (for example  ``["--verbose", "--help"]``).
     """
-    args = parse_args(args)
-    setup_logging(args.loglevel)
-    _logger.debug(args)
+    # args = parse_args(args)
+    # setup_logging(args.loglevel)
+    # _logger.debug(args)
 
-    wd_fw_update()
+    print(args)
+    device = "/dev/nvme0n1"
+    wd_fw_update(device=device)
 
     _logger.info("[END of script]")
 
