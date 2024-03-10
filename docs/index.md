@@ -3,9 +3,14 @@
 <img alt="Western Digital SSD Firmware Update Tool" src=https://github.com/not-a-feature/wd_fw_update/raw/main/logo.png height=90>
 
 This is a firmware update tool for Western Digital SSDs on Ubuntu / Linux Mint.
+
 It provides a user-friendly interface to select the firmware version for the update process.
 
-It uses the Western Digital API and the NVME toolbox `nvme-cli`.
+It uses the Western Digital API and the NVME toolbox nvme-cli but is NOT associated in any case to them.
+
+It was originally developed for Frame.Work laptops, but should work with any Ubuntu / Mint device with Western Digital NVME SSD.
+
+See the discussion on: [community.frame.work](https://community.frame.work/t/western-digital-drive-update-guide-without-windows-wd-dashboard/20616)
 
 ## Contents
 
