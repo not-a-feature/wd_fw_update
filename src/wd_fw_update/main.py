@@ -318,7 +318,6 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
         prefix=package_name,
         suffix=".fluf",
         mode="wb",
-        delete_on_close=False,
     ) as fw_file, tqdm(
         total=total_size,
         unit="B",
@@ -328,8 +327,6 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
         for data in r.iter_content(1024):
             pbar.update(len(data))
             fw_file.write(data)
-
-        fw_file.close()  # Close, but keep the temporary file.
 
         print()
         print("========== Summary ==========")
