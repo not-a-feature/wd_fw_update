@@ -101,7 +101,11 @@ def ask_device():
     )
     devices = [d.split(" ", 1)[0] for d in result.stdout.split("\n")[2:] if d]
 
-    _logger.debug(f"Asking for device: {devices}")
+    if len(devices) == 1:
+        _logger.debug(f"Only one device found: {devices}\n")
+        return devices[0]
+
+    _logger.debug(f"Asking for device: {devices}\n")
     questions = [
         inquirer.List(
             "device",
@@ -218,21 +222,38 @@ def ask_slot(device):
         capture_output=True,
         text=True,
     )
+    _logger.debug(result.stdout)
 
     result = result.stdout.split("\n")
-    print(result)
-    current_slot = int(result[1].split(":")[1], 0)
+
+    """
+    From: https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4b-2020.09.21-Ratified.pdf
+
+    Active Firmware Info (AFI): Specifies information about the active firmware revision.
+
+    - Bit 7     Reserved.
+    - Bits 6:4  The firmware slot that is going to be activated at the
+                next Controller Level Reset. If this field is 0h, then the
+                controller does not indicate the firmware slot that is
+                going to be activated at the next Controller Level Reset.
+
+    - Bit 3     Reserved.
+    - Bits 2:0  The firmware slot from which the actively running firmware revision was loaded.
+    """
+    current_slot = int(result[1].split(":")[1], 0)  # From Hex to Base 10.
+    current_slot = int("0b" + bin(current_slot)[-2:], base=0)  # Take last two bits
+
     print(f"Current Active Firmware Slot (afi): {current_slot}")
 
     slots = [s[3:] for s in sorted(result[2:10]) if s]
     _logger.debug(f"Firmware slots: {slots}")
 
     if len(slots) == 1:
-        _logger.debug("Only one slot to select, skipping user-promt.")
+        _logger.info("Only one slot to select, skipping user-promt.")
 
         return int(slots[0].split(":")[0])  # Should always be 1
 
-    print("Select the firmware slot.")
+    print("Select the slot to which the firmware should be installed.")
     questions = [
         inquirer.List(
             "slot",
@@ -308,7 +329,7 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
 
     firmware_url = f"{prop_url}{root.findtext('fwfile')}"
 
-    _logger.debug(f"Firmware file url: {firmware_url}")
+    _logger.debug(f"Firmware file url: {firmware_url}\n")
     _logger.info("Downloading firmware.")
 
     r = requests.get(firmware_url, stream=True)
@@ -330,23 +351,23 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
 
         print()
         print("========== Summary ==========")
-        print(f"NVME location:    {device}")
-        print(f"Model:            {model}")
-        print(f"Firmware Version: {current_fw_version} --> {version}")
-        if mode:
-            print(f"Firmware Slot:    {current_slot} --> {slot}")
-        print(f"Activation Mode:  {mode}")
-        print(f"Temporary File:   {fw_file.name}\n\n")
+        print(f"NVME location:     {device}")
+        print(f"Model:             {model}")
+        print(f"Firmware Version:  {current_fw_version} --> {version}")
+        print(f"Installation Slot: {slot}")
+        print(f"Active Slot:       {current_slot} --> {slot}")
+        print(f"Activation Mode:   {mode}")
+        print(f"Temporary File:    {fw_file.name}\n\n")
 
         questions = [
-            inquirer.Confirm("continue", message="The summary is correct. Continue", default=True),
+            inquirer.Confirm("continue", message="The summary is correct. Continue", default=False),
         ]
 
         answer = inquirer.prompt(questions)["continue"]
 
         if not answer:
             print("Aborted.")
-            exit(1)
+            exit(0)
 
         _logger.info("Loading the firmware file.")
 
