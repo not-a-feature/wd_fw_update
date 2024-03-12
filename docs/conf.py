@@ -93,7 +93,6 @@ myst_enable_extensions = [
     "smartquotes",
     "substitution",
     "tasklist",
-    "sphinx_rtd_theme",
 ]
 
 # The suffix of source filenames.
