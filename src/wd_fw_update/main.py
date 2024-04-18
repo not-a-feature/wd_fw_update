@@ -5,6 +5,7 @@ import sys
 import xml.etree.ElementTree as ET
 from shutil import which
 from tempfile import NamedTemporaryFile
+from typing import Dict, List, Tuple
 
 import inquirer
 import requests
@@ -59,7 +60,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def setup_logging(loglevel):
+def setup_logging(loglevel) -> None:
     """Setup basic logging
 
     Args:
@@ -74,7 +75,7 @@ def setup_logging(loglevel):
     )
 
 
-def check_missing_dependencies():
+def check_missing_dependencies() -> bool:
     """Check for missing dependencies
 
     Returns:
@@ -85,7 +86,7 @@ def check_missing_dependencies():
     return any(which(cmd) is None for cmd in dependencies)
 
 
-def ask_device():
+def ask_device() -> str:
     """Prompt the user to select an NVME drive for the update
 
     Returns:
@@ -118,7 +119,7 @@ def ask_device():
     return device
 
 
-def get_model_properties(device):
+def get_model_properties(device) -> Dict:
     """Retrieve model properties for the specified NVME device
 
     Args:
@@ -144,7 +145,7 @@ def get_model_properties(device):
     return model_properties
 
 
-def get_fw_url(model):
+def get_fw_url(model) -> List[str]:
     """Fetch firmware URL for the specified model from the device list
 
     Args:
@@ -166,7 +167,7 @@ def get_fw_url(model):
     raise RuntimeError("No Firmware found for this model. Please check your selection / model.")
 
 
-def ask_fw_version(relative_urls, model, current_fw_version):
+def ask_fw_version(device, relative_urls, model, current_fw_version) -> str:
     """Prompt the user to select a firmware version
 
     Args:
@@ -184,6 +185,10 @@ def ask_fw_version(relative_urls, model, current_fw_version):
     _logger.debug(f"Firmware versions: f{fw_versions}")
 
     if not fw_versions:
+        print("========== Summary ==========")
+        print(f"NVME location:     {device}")
+        print(f"Model:             {model}")
+        print(f"Firmware Version:  {current_fw_version}")
         print("No different / newer firmware version found.")
         print("You are probably already on the latest version.")
         exit(0)
@@ -207,7 +212,7 @@ def ask_fw_version(relative_urls, model, current_fw_version):
     return version
 
 
-def ask_slot(device):
+def ask_slot(device) -> Tuple[int, int]:
     """Prompt the user to select a firmware slot
 
     Args:
@@ -240,8 +245,10 @@ def ask_slot(device):
     - Bit 3     Reserved.
     - Bits 2:0  The firmware slot from which the actively running firmware revision was loaded.
     """
-    current_slot = int(result[1].split(":")[1], 0)  # From Hex to Base 10.
-    current_slot = int("0b" + bin(current_slot)[-2:], base=0)  # Take last two bits
+    current_slot = result[1].split(":")[1].strip()
+    current_slot = int(current_slot, 0)  # From Hex to Base 10
+    if not current_slot == 1:
+        current_slot = int("0b" + bin(current_slot)[-2:], base=0)  # Take last two bits
 
     print(f"Current Active Firmware Slot (afi): {current_slot}")
 
@@ -267,7 +274,7 @@ def ask_slot(device):
     return current_slot, slot
 
 
-def ask_mode():
+def ask_mode() -> int:
     """Prompt the user to select the firmware update mode
 
     Returns:
@@ -293,7 +300,7 @@ def ask_mode():
     return mode
 
 
-def update_fw(version, current_fw_version, model, device, current_slot, slot, mode):
+def update_fw(version, current_fw_version, model, device, current_slot, slot, mode) -> bool:
     """Update firmware for the specified NVME device
 
     Args:
@@ -406,7 +413,7 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
     else:
         success = False
 
-    return success, mode
+    return success
 
 
 def wd_fw_update():
@@ -437,7 +444,8 @@ def wd_fw_update():
     current_fw_version = model_properties["fr"]
 
     selected_version = ask_fw_version(
-        relative_urls,
+        device=device,
+        relative_urls=relative_urls,
         model=model,
         current_fw_version=current_fw_version,
     )
@@ -449,7 +457,7 @@ def wd_fw_update():
     mode = ask_mode()
 
     # Step 6: Download and install the firmware file
-    result, mode = update_fw(
+    result = update_fw(
         version=selected_version,
         current_fw_version=current_fw_version,
         model=model,
