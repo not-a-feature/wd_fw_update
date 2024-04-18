@@ -16,6 +16,7 @@ It was originally developed for Frame.Work laptops, but should work with any Ubu
 
 See the discussion on: [community.frame.work](https://community.frame.work/t/western-digital-drive-update-guide-without-windows-wd-dashboard/20616)
 
+<img alt="GIF" src=https://github.com/not-a-feature/wd_fw_update/raw/main/gif.gif height=250>
 
 ## Installation
 ### Prerequisites
