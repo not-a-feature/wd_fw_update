@@ -60,7 +60,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def setup_logging(loglevel) -> None:
+def setup_logging(loglevel: int) -> None:
     """Setup basic logging
 
     Args:
@@ -79,18 +79,18 @@ def check_missing_dependencies() -> bool:
     """Check for missing dependencies
 
     Returns:
-      bool: True if any dependency is missing, False otherwise
+      is_missing (bool): True if any dependency is missing, False otherwise.
     """
     dependencies = ["sudo", "nvme"]  # List of commands to check
-
-    return any(which(cmd) is None for cmd in dependencies)
+    is_missing = any(which(cmd) is None for cmd in dependencies)
+    return is_missing
 
 
 def ask_device() -> str:
     """Prompt the user to select an NVME drive for the update
 
     Returns:
-      str: Selected NVME drive
+      device (str): Selected NVME drive
     """
     _logger.debug("Getting device list.")
 
@@ -123,10 +123,10 @@ def get_model_properties(device) -> Dict:
     """Retrieve model properties for the specified NVME device
 
     Args:
-      device (str): NVME device identifier
+        device (str): NVME device identifier.
 
     Returns:
-      dict: Model properties
+        model_properties (dict): Model properties.
     """
     _logger.debug("Getting device properties.")
 
@@ -142,17 +142,19 @@ def get_model_properties(device) -> Dict:
         if ":" in line:
             k, v = line.split(":", 1)
             model_properties[k.strip()] = v.strip()
+
+    _logger.info(f"Model name: {model_properties['mn']}")
     return model_properties
 
 
-def get_fw_url(model) -> List[str]:
+def get_fw_url(model: str) -> List[str]:
     """Fetch firmware URL for the specified model from the device list
 
     Args:
-      model (str): Model name
+      model (str): Model name.
 
     Returns:
-      list: List of firmware URLs
+      list: List of firmware URLs.
     """
     _logger.debug("Getting firmware url.")
 
@@ -171,12 +173,13 @@ def ask_fw_version(device, relative_urls, model, current_fw_version) -> str:
     """Prompt the user to select a firmware version
 
     Args:
-      relative_urls (list): List of firmware URLs
-      model (str): Model name
-      current_fw_version (str): Current firmware version
+        device (str): NVME device identifier.
+        relative_urls (list): List of firmware URLs.
+        model (str): Model name.
+        current_fw_version (str): Current firmware version.
 
     Returns:
-      str: Selected firmware version
+      str: Selected firmware version.
     """
     if not relative_urls:
         raise RuntimeWarning("No Firmware Version to select.")
@@ -212,14 +215,14 @@ def ask_fw_version(device, relative_urls, model, current_fw_version) -> str:
     return version
 
 
-def ask_slot(device) -> Tuple[int, int]:
+def ask_slot(device: str) -> Tuple[int, int]:
     """Prompt the user to select a firmware slot
 
     Args:
-      device (str): NVME device identifier
+      device (str): NVME device identifier.
 
     Returns:
-      int, int: Current active firmware slot, Selected firmware slot
+      int, int: Current active firmware slot, selected firmware slot.
     """
     result = subprocess.run(
         ["sudo", "nvme", "fw-log", device, "--output-format=normal"],
@@ -300,22 +303,21 @@ def ask_mode() -> int:
     return mode
 
 
-def update_fw(version, current_fw_version, model, device, current_slot, slot, mode) -> bool:
-    """Update firmware for the specified NVME device
-
+def get_upgrade_url(
+    model: str,
+    version: str,
+    current_fw_version: str,
+) -> str:
+    """Check if an upgrade from the current firmware to the new one is supported and returns the firmware url.
     Args:
-      version (str): Firmware version to be installed
-      current_fw_version (str): Current firmware version
-      model (str): Model name
-      device (str): NVME device identifier
-      current_slot (int): Current active firmware slot
-      slot (int): Selected firmware slot
-      mode (int): Selected update mode
+        model (str): Model name.
+        version (str): Firmware version to be installed.
+        current_fw_version (str): Current firmware version.
 
     Returns:
-      tuple: Success status (bool), Updated firmware slot (int)
+        firmware_url (srr): URL to new firmware file.
     """
-    # Get FW properties
+
     model = model.replace(" ", "_")
     prop_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{version}/device_properties.xml"
 
@@ -337,6 +339,35 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
     firmware_url = f"{prop_url}{root.findtext('fwfile')}"
 
     _logger.debug(f"Firmware file url: {firmware_url}\n")
+    return firmware_url
+
+
+def update_fw(
+    current_fw_version: str,
+    version: str,
+    firmware_url: str,
+    model: str,
+    device: str,
+    current_slot: int,
+    slot: int,
+    mode: int,
+) -> bool:
+    """Update firmware for the specified NVME device
+
+    Args:
+        current_fw_version (str): Current firmware version.
+        version (str): Firmware version to be installed.
+        firmware_url (str): URL to new firmware file.
+        model (str): Model name.
+        device (str): NVME device identifier.
+        current_slot (int): Current active firmware slot.
+        slot (int): Selected firmware slot.
+        mode (int): Selected update mode.
+
+    Returns:
+        success (bool): Success status.
+    """
+    # Get FW properties
     _logger.info("Downloading firmware.")
 
     r = requests.get(firmware_url, stream=True)
@@ -367,7 +398,7 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
         print(f"Temporary File:    {fw_file.name}\n\n")
 
         questions = [
-            inquirer.Confirm("continue", message="The summary is correct. Continue", default=False),
+            inquirer.Confirm("continue", message="The summary is correct. Continue", default=False)
         ]
 
         answer = inquirer.prompt(questions)["continue"]
@@ -411,6 +442,7 @@ def update_fw(version, current_fw_version, model, device, current_slot, slot, mo
     if result.returncode == 0:
         success = True
     else:
+        print(result)
         success = False
 
     return success
@@ -438,6 +470,7 @@ def wd_fw_update():
 
     # Step 2: Fetch the device list and find the firmware URL
     model = model_properties["mn"]
+
     relative_urls = get_fw_url(model=model)
 
     # Step 3: Check firmware version and dependencies
@@ -450,16 +483,23 @@ def wd_fw_update():
         current_fw_version=current_fw_version,
     )
 
-    # Step 4: Ask for the slot to install the firmware
+    # Step 4: Check if an upgrade from the current firmware to the new one is supported.
+    firmware_url = get_upgrade_url(
+        current_fw_version=current_fw_version,
+        version=selected_version,
+        model=model,
+    )
+    # Step 5: Ask for the slot to install the firmware
     current_slot, slot = ask_slot(device)
 
-    # Step 5: Ask for installation mode
+    # Step 6: Ask for installation mode
     mode = ask_mode()
 
-    # Step 6: Download and install the firmware file
+    # Step 7: Download and install the firmware file
     result = update_fw(
-        version=selected_version,
         current_fw_version=current_fw_version,
+        version=selected_version,
+        firmware_url=firmware_url,
         model=model,
         device=device,
         current_slot=current_slot,
