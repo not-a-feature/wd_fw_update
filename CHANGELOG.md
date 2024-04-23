@@ -1,4 +1,8 @@
 # Changelog
+## Version 1.2.1
+- Remove debug value
+**Full Changelog**: [v1.1.1...v1.2.0](https://github.com/not-a-feature/wd_fw_update/compare/v1.2.0...v1.2.1)
+
 ## Version 1.2.0
 - Perform version dependency check earlier s.t. it fails early.
 - Improved error messages.
