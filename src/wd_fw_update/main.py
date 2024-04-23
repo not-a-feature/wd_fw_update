@@ -470,7 +470,7 @@ def wd_fw_update():
 
     # Step 2: Fetch the device list and find the firmware URL
     model = model_properties["mn"]
-    model = "WD_BLACK SN850X 2000GB"
+
     relative_urls = get_fw_url(model=model)
 
     # Step 3: Check firmware version and dependencies
