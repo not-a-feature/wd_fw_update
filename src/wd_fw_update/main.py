@@ -198,19 +198,17 @@ def ask_fw_version(device, relative_urls, model, current_fw_version) -> str:
 
     if len(fw_versions) == 1:
         _logger.debug("Only one firmware to select, skipping user-promt.")
+        return fw_versions[0]
 
-        version = fw_versions[0]
-
-    else:
-        questions = [
-            inquirer.List(
-                "version",
-                message=f"Select the Firmware Version for {model}",
-                choices=fw_versions,
-                carousel=True,
-            ),
-        ]
-        version = inquirer.prompt(questions)["version"]
+    questions = [
+        inquirer.List(
+            "version",
+            message=f"Select the Firmware Version for {model}",
+            choices=fw_versions,
+            carousel=True,
+        ),
+    ]
+    version = inquirer.prompt(questions)["version"]
 
     return version
 
