@@ -334,7 +334,8 @@ def get_upgrade_url(
     # Check if current firmware is in dependencies
     if current_fw_version not in dependencies_list:
         print("Current firmware version is not in the dependencies.")
-        raise RuntimeError(f"Please upgrade to one of these versions first: {dependencies_list}")
+        print(f"Please upgrade to one of these versions first: {dependencies_list}")
+        exit(1)
 
     firmware_url = f"{prop_url}{root.findtext('fwfile')}"
 
