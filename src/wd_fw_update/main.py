@@ -333,8 +333,9 @@ def get_upgrade_url(
 
     # Check if current firmware is in dependencies
     if current_fw_version not in dependencies_list:
-        print("Current firmware version is not in the dependencies.")
-        print(f"Please upgrade to one of these versions first: {dependencies_list}")
+        print(f"The current firmware version {current_fw_version} is not in the dependency")
+        print(f"list of the new firmware. In order to upgrade to {version}, please")
+        print(f"upgrade to one of these versions first: {dependencies_list}")
         exit(1)
 
     firmware_url = f"{prop_url}{root.findtext('fwfile')}"
@@ -471,7 +472,7 @@ def wd_fw_update():
 
     # Step 2: Fetch the device list and find the firmware URL
     model = model_properties["mn"]
-
+    model = "WD_BLACK SN850X 2000GB"
     relative_urls = get_fw_url(model=model)
 
     # Step 3: Check firmware version and dependencies
