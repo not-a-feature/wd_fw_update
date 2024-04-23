@@ -1,4 +1,9 @@
 # Changelog
+## Version 1.2.0
+- Perform version dependency check earlier s.t. it fails early.
+- Improved error messages.
+- Improved docstrings.
+**Full Changelog**: https://github.com/not-a-feature/wd_fw_update/compare/v1.1.1...v1.2.0
 
 ## Version 1.1.1
 - Improve nvme slot detection.
