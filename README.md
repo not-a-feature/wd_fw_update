@@ -13,7 +13,7 @@ It uses the Western Digital API and the NVME toolbox `nvme-cli` but is NOT assoc
 
 It was originally developed for Frame.Work laptops, but should work with any Ubuntu / Mint device with Western Digital NVME SSD.
 
-See the discussion on: [community.frame.work](https://community.frame.work/t/western-digital-drive-update-guide-without-windows-wd-dashboard/20616)
+See the discussion on: [community.frame.work](https://community.frame.work/t/western-digital-drive-update-guide-without-windows-wd-dashboard/20616) and [juleskreuer.eu](https://juleskreuer.eu/western-digital-firmware-update/)
 
 <img alt="GIF" src=https://github.com/not-a-feature/wd_fw_update/raw/main/gif.gif height=250>
 
