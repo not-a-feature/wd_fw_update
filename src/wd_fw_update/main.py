@@ -260,7 +260,7 @@ def ask_slot(device: str) -> Tuple[int, int]:
         _logger.info("Only one slot to select, skipping user-promt.")
 
         slot = int(slots[0].split(":")[0])  # Should always be 1
-        return slot, slot
+        return current_slot, slot
 
     print("Select the slot to which the firmware should be installed.")
     questions = [
