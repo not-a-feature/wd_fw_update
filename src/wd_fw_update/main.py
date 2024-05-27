@@ -318,7 +318,8 @@ def get_upgrade_url(
     """
 
     model = model.replace(" ", "_")
-    prop_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{version}/device_properties.xml"
+    base_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{version}"
+    prop_url = f"{base_url}/device_properties.xml"
 
     _logger.debug(f"Firmware properties url: {prop_url}")
 
@@ -337,7 +338,7 @@ def get_upgrade_url(
         print(f"upgrade to one of these versions first: {dependencies_list}")
         exit(1)
 
-    firmware_url = f"{prop_url}{root.findtext('fwfile')}"
+    firmware_url = f"{base_url}/{root.findtext('fwfile')}"
 
     _logger.debug(f"Firmware file url: {firmware_url}\n")
     return firmware_url
@@ -387,6 +388,11 @@ def update_fw(
         for data in r.iter_content(1024):
             pbar.update(len(data))
             fw_file.write(data)
+
+        _logger.info(f"HTTP Status Code: {r.status_code}")
+        if not r.status_code == 200:
+            print("Error downloading the firmware file.")
+            exit(1)
 
         print()
         print("========== Summary ==========")
