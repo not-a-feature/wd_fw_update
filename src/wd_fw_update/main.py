@@ -34,7 +34,7 @@ def parse_args(args):
     Returns:
       :obj:`argparse.Namespace`: command line parameters namespace
     """
-    parser = argparse.ArgumentParser(description="Just a Fibonacci demonstration")
+    parser = argparse.ArgumentParser(description="CLI tool to find and update firmware for WD nvme drives")
     parser.add_argument(
         "--version",
         action="version",
