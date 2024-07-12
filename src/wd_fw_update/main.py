@@ -1,11 +1,13 @@
 import argparse
+import json
 import logging
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from dataclasses import asdict, dataclass, field
 from shutil import which
 from tempfile import NamedTemporaryFile
-from typing import Dict, List, Tuple
+from typing import List
 
 import inquirer
 import requests
@@ -22,6 +24,26 @@ _logger = logging.getLogger(__name__)
 
 BASE_WD_DOMAIN = "https://wddashboarddownloads.wdc.com/wdDashboard"
 DEVICE_LIST_URL = f"{BASE_WD_DOMAIN}/config/devices/lista_devices.xml"
+
+
+@dataclass
+class Drive:
+    """Class for keeping track of the NVME drive and firmware properties."""
+
+    device: str = ""
+    model: str = ""
+    current_fw_version: str = ""
+    slot_1_readonly: bool = None
+    slot_count: int = -1
+    current_slot: int = -1
+    slots_with_firmware: dict = field(default_factory=dict)
+    selected_slot: int = -1
+    activation_without_reset: bool = None
+    relative_fw_urls: List[str] = field(default_factory=list)
+    selected_version: str = ""
+    firmware_url: str = ""
+    activation_mode: int = -1
+    tmp_fw_file_name: str = ""
 
 
 def parse_args(args):
@@ -42,6 +64,20 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "-i",
+        "--info",
+        action="store_true",
+        help="Print information about the current ssd, firmware and more.",
+    )
+
+    # parser.add_argument(
+    #    "-f",
+    #    "--force",
+    #    action="store_true",
+    #    help="Force the firmware update without additional confirmation.",
+    # )
+
+    parser.add_argument(
         "-v",
         "--verbose",
         dest="loglevel",
@@ -57,6 +93,7 @@ def parse_args(args):
         action="store_const",
         const=logging.DEBUG,
     )
+
     return parser.parse_args(args)
 
 
@@ -86,11 +123,22 @@ def check_missing_dependencies() -> bool:
     return is_missing
 
 
-def ask_device() -> str:
-    """Prompt the user to select an NVME drive for the update
+def print_info(drive=None) -> None:
+    """Print an overview of the NVME drive."""
+    get_model_properties(drive=drive)
+    print("========== Device Info ==========")
+    for k, v in asdict(drive).items():
+        k = k.replace("_", " ").ljust(25)
+        k = k[0].upper() + k[1:]
+        print(f"{k}: {v}")
+    print()
+
+
+def get_devices() -> List[str]:
+    """Returns a list of all NVME drives.
 
     Returns:
-      device (str): Selected NVME drive
+      devices (List[str]): List of NVME drives
     """
     _logger.debug("Getting device list.")
 
@@ -101,10 +149,23 @@ def ask_device() -> str:
         text=True,
     )
     devices = [d.split(" ", 1)[0] for d in result.stdout.split("\n")[2:] if d]
+    _logger.debug(f"Device list: {devices}\n")
+    return devices
+
+
+def ask_device(drive) -> None:
+    """Prompt the user to select an NVME drive for the update.
+
+    Returns:
+      device (str): Selected NVME drive
+    """
+
+    devices = get_devices()
 
     if len(devices) == 1:
         _logger.debug(f"Only one device found: {devices}\n")
-        return devices[0]
+        drive.device = devices[0]
+        return
 
     _logger.debug(f"Asking for device: {devices}\n")
     questions = [
@@ -116,45 +177,75 @@ def ask_device() -> str:
         ),
     ]
     device = inquirer.prompt(questions)["device"]
-    return device
+    drive.device = device
 
 
-def get_model_properties(device) -> Dict:
-    """Retrieve model properties for the specified NVME device
-
-    Args:
-        device (str): NVME device identifier.
-
-    Returns:
-        model_properties (dict): Model properties.
-    """
-    _logger.debug("Getting device properties.")
+def get_model_properties(drive) -> None:
+    """Retrieve model properties for the specified NVME device"""
+    _logger.info(f"Getting device properties of {drive.device}")
 
     result = subprocess.run(
-        ["sudo", "nvme", "id-ctrl", device],
+        ["sudo", "nvme", "id-ctrl", drive.device, "--output-format=json"],
         shell=False,
         capture_output=True,
         text=True,
     )
+    # _logger.debug(result.stdout)
+    raw_properties = json.loads(result.stdout)
 
-    model_properties = {}
-    for line in result.stdout.split("\n")[1:]:
-        if ":" in line:
-            k, v = line.split(":", 1)
-            model_properties[k.strip()] = v.strip()
+    drive.model = raw_properties["mn"].strip()
+    drive.current_fw_version = raw_properties["fr"].strip()
 
-    _logger.info(f"Model name: {model_properties['mn']}")
-    return model_properties
+    # Get slot information
+    frmw = bin(int(raw_properties["frmw"]))
+    frmw = frmw.lstrip("0b").rjust(8, "0")
+
+    drive.slot_1_readonly = bool(int(frmw[-1]))
+    drive.slot_count = int(frmw[-4:-1], 2)
+    drive.activation_without_reset = bool(int(frmw[-5]))
+
+    # Get current active slot
+    result = subprocess.run(
+        ["sudo", "nvme", "fw-log", drive.device, "--output-format=json"],
+        shell=False,
+        capture_output=True,
+        text=True,
+    )
+    # _logger.debug(result.stdout)
+
+    result = json.loads(result.stdout)
+    result = list(result.values())[0]
+
+    """
+    From: https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4b-2020.09.21-Ratified.pdf
+
+    Active Firmware Info (AFI): Specifies information about the active firmware revision.
+    [...]
+
+    - Bits 2:0  The firmware slot from which the actively running firmware revision was loaded.
+    """
+    active_firmware_slot = int(result["Active Firmware Slot (afi)"])
+    active_firmware_slot = bin(active_firmware_slot).lstrip("0b").rjust(8, "0")
+    current_slot = int(active_firmware_slot[-2:], 2)
+    _logger.info(f"Current Active Firmware Slot: {current_slot}")
+
+    slots_with_firmware = {}
+    for k, v in result.items():
+        if k.startswith("Firmware Rev Slot"):
+            k = int(k.lstrip("Firmware Rev Slot "))
+            slots_with_firmware[k] = v
+
+    _logger.debug(f"Slots with Firmware: {slots_with_firmware}")
+
+    drive.current_slot = current_slot
+    drive.slots_with_firmware = slots_with_firmware
 
 
-def get_fw_url(model: str) -> List[str]:
+def get_fw_url(drive: Drive) -> None:
     """Fetch firmware URL for the specified model from the device list
 
     Args:
-      model (str): Model name.
-
-    Returns:
-      list: List of firmware URLs.
+      drive (Drive): The Drive object.
     """
     _logger.debug("Getting firmware url.")
 
@@ -162,58 +253,55 @@ def get_fw_url(model: str) -> List[str]:
     response.raise_for_status()
 
     root = ET.fromstring(response.content)
+
     for device in root.findall("lista_device"):
-        if device.get("model") == model:
-            return [u.text for u in device.findall("url")]
+        if device.get("model") == drive.model:
+            drive.relative_fw_urls = [u.text for u in device.findall("url")]
+            return
 
     raise RuntimeError("No Firmware found for this model. Please check your selection / model.")
 
 
-def ask_fw_version(device, relative_urls, model, current_fw_version) -> str:
+def ask_fw_version(drive) -> None:
     """Prompt the user to select a firmware version
 
     Args:
-        device (str): NVME device identifier.
-        relative_urls (list): List of firmware URLs.
-        model (str): Model name.
-        current_fw_version (str): Current firmware version.
-
-    Returns:
-      str: Selected firmware version.
+      drive (Drive): The Drive object.
     """
-    if not relative_urls:
-        raise RuntimeWarning("No Firmware Version to select.")
+    if not drive.relative_fw_urls:
+        raise RuntimeError("No Firmware Version to select.")
 
-    fw_versions = [v for url in relative_urls if not (v := url.split("/")[3]) == current_fw_version]
-    _logger.debug(f"Firmware versions: f{fw_versions}")
+    fw_versions = [
+        v
+        for url in drive.relative_fw_urls
+        if not (v := url.split("/")[3]) == drive.current_fw_version
+    ]
+    _logger.debug(f"Firmware versions: {fw_versions}")
 
     if not fw_versions:
-        print("========== Summary ==========")
-        print(f"NVME location:     {device}")
-        print(f"Model:             {model}")
-        print(f"Firmware Version:  {current_fw_version}")
+        print_info(drive=drive)
         print("No different / newer firmware version found.")
         print("You are probably already on the latest version.")
         exit(0)
 
     if len(fw_versions) == 1:
         _logger.debug("Only one firmware to select, skipping user-promt.")
-        return fw_versions[0]
+        drive.selected_version = fw_versions[0]
+        return
 
     questions = [
         inquirer.List(
             "version",
-            message=f"Select the Firmware Version for {model}",
+            message=f"Select the Firmware Version for {drive.model}",
             choices=fw_versions,
             carousel=True,
         ),
     ]
-    version = inquirer.prompt(questions)["version"]
+    selected_version = inquirer.prompt(questions)["version"]
+    drive.selected_version = selected_version
 
-    return version
 
-
-def ask_slot(device: str) -> Tuple[int, int]:
+def ask_slot(drive) -> None:
     """Prompt the user to select a firmware slot
 
     Args:
@@ -222,72 +310,58 @@ def ask_slot(device: str) -> Tuple[int, int]:
     Returns:
       int, int: Current active firmware slot, selected firmware slot.
     """
-    result = subprocess.run(
-        ["sudo", "nvme", "fw-log", device, "--output-format=normal"],
-        shell=False,
-        capture_output=True,
-        text=True,
-    )
-    _logger.debug(result.stdout)
 
-    result = result.stdout.split("\n")
+    slots = list(range(1, drive.slot_count + 1))
 
-    """
-    From: https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4b-2020.09.21-Ratified.pdf
+    # If the first slot is read only
+    if drive.slot_1_readonly:
+        slots = slots[1:]
 
-    Active Firmware Info (AFI): Specifies information about the active firmware revision.
-
-    - Bit 7     Reserved.
-    - Bits 6:4  The firmware slot that is going to be activated at the
-                next Controller Level Reset. If this field is 0h, then the
-                controller does not indicate the firmware slot that is
-                going to be activated at the next Controller Level Reset.
-
-    - Bit 3     Reserved.
-    - Bits 2:0  The firmware slot from which the actively running firmware revision was loaded.
-    """
-    current_slot = result[1].split(":")[1].strip()
-    current_slot = int(current_slot, 0)  # From Hex to Base 10
-    if not current_slot == 1:
-        current_slot = int("0b" + bin(current_slot)[-2:], base=0)  # Take last two bits
-
-    print(f"Current Active Firmware Slot (afi): {current_slot}")
-
-    slots = [s[3:] for s in sorted(result[2:10]) if s]
     _logger.debug(f"Firmware slots: {slots}")
 
     if len(slots) == 1:
         _logger.info("Only one slot to select, skipping user-promt.")
-
-        slot = int(slots[0].split(":")[0])  # Should always be 1
-        return current_slot, slot
+        drive.selected_slot = slots[0]
+        return
 
     print("Select the slot to which the firmware should be installed.")
+
+    slot_questions = []
+    for s in slots:
+        if s in drive.slots_with_firmware:
+            fw_label = drive.slots_with_firmware[s]
+        else:
+            fw_label = "No firmware."
+        slot_questions.append(f"{s}: {fw_label}")
+
     questions = [
         inquirer.List(
             "slot",
             message="Slot ID: Current Firmware Version",
-            choices=slots,
+            choices=slot_questions,
             carousel=True,
         ),
     ]
     slot = inquirer.prompt(questions)["slot"]
-    slot = int(slot.split(":", 1)[0])
-    return current_slot, slot
+    slot = int(slot[0])
+    drive.selected_slot = slot
 
 
-def ask_mode() -> int:
+def ask_mode(drive):
     """Prompt the user to select the firmware update mode
 
     Returns:
       int: Selected update mode
     """
-    o0 = "0 Downloaded image replaces the image indicated by the Firmware Slot field. This image is not activated."
-    o1 = "1 Downloaded image replaces the image indicated by the Firmware Slot field. This image is activated at the next reset."
-    o2 = "2 The image indicated by the Firmware Slot field is activated at the next reset."
-    o3 = "3 The image specified by the Firmware Slot field is requested to be activated immediately without reset."
+    o0 = "0: Downloaded image replaces the image indicated by the Firmware Slot field. This image is not activated."
+    o1 = "1: Downloaded image replaces the image indicated by the Firmware Slot field. This image is activated at the next reset."
+    o2 = "2: The image indicated by the Firmware Slot field is activated at the next reset."
+    o3 = "3: The image specified by the Firmware Slot field is requested to be activated immediately without reset."
 
-    modes = [o0, o1, o2, o3]
+    modes = [o0, o1, o2]
+    if drive.activation_without_reset:
+        modes.append(o3)
+
     questions = [
         inquirer.List(
             "mode",
@@ -298,15 +372,11 @@ def ask_mode() -> int:
         ),
     ]
     mode = inquirer.prompt(questions)["mode"]
-    mode = int(mode.split(" ", 1)[0])
-    return mode
+    mode = int(mode[0])
+    drive.mode = mode
 
 
-def get_upgrade_url(
-    model: str,
-    version: str,
-    current_fw_version: str,
-) -> str:
+def get_upgrade_url(drive) -> None:
     """Check if an upgrade from the current firmware to the new one is supported and returns the firmware url.
     Args:
         model (str): Model name.
@@ -317,8 +387,8 @@ def get_upgrade_url(
         firmware_url (srr): URL to new firmware file.
     """
 
-    model = model.replace(" ", "_")
-    base_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{version}"
+    model = drive.model.replace(" ", "_")
+    base_url = f"{BASE_WD_DOMAIN}/firmware/{model}/{drive.selected_version}"
     prop_url = f"{base_url}/device_properties.xml"
 
     _logger.debug(f"Firmware properties url: {prop_url}")
@@ -332,28 +402,19 @@ def get_upgrade_url(
     _logger.debug(f"Firmware dependencies: {dependencies_list}")
 
     # Check if current firmware is in dependencies
-    if current_fw_version not in dependencies_list:
-        print(f"The current firmware version {current_fw_version} is not in the dependency")
-        print(f"list of the new firmware. In order to upgrade to {version}, please")
+    if drive.current_fw_version not in dependencies_list:
+        print(f"The current firmware version {drive.current_fw_version} is not in the dependency")
+        print(f"list of the new firmware. In order to upgrade to {drive.version}, please")
         print(f"upgrade to one of these versions first: {dependencies_list}")
         exit(1)
 
     firmware_url = f"{base_url}/{root.findtext('fwfile')}"
 
     _logger.debug(f"Firmware file url: {firmware_url}\n")
-    return firmware_url
+    drive.firmware_url = firmware_url
 
 
-def update_fw(
-    current_fw_version: str,
-    version: str,
-    firmware_url: str,
-    model: str,
-    device: str,
-    current_slot: int,
-    slot: int,
-    mode: int,
-) -> bool:
+def update_fw(drive) -> bool:
     """Update firmware for the specified NVME device
 
     Args:
@@ -372,7 +433,7 @@ def update_fw(
     # Get FW properties
     _logger.info("Downloading firmware.")
 
-    r = requests.get(firmware_url, stream=True)
+    r = requests.get(drive.firmware_url, stream=True)
     total_size = int(r.headers.get("content-length", 0))
 
     with NamedTemporaryFile(
@@ -385,6 +446,7 @@ def update_fw(
         unit_scale=True,
         unit_divisor=1024,
     ) as pbar:
+        drive.tmp_fw_file_name = fw_file.name
         for data in r.iter_content(1024):
             pbar.update(len(data))
             fw_file.write(data)
@@ -396,13 +458,13 @@ def update_fw(
 
         print()
         print("========== Summary ==========")
-        print(f"NVME location:     {device}")
-        print(f"Model:             {model}")
-        print(f"Firmware Version:  {current_fw_version} --> {version}")
-        print(f"Installation Slot: {slot}")
-        print(f"Active Slot:       {current_slot} --> {slot}")
-        print(f"Activation Mode:   {mode}")
-        print(f"Temporary File:    {fw_file.name}\n\n")
+        print(f"NVME location:     {drive.device}")
+        print(f"Model:             {drive.model}")
+        print(f"Firmware Version:  {drive.current_fw_version} --> {drive.selected_version}")
+        print(f"Installation Slot: {drive.selected_slot}")
+        print(f"Active Slot:       {drive.current_slot} --> {drive.selected_slot}")
+        print(f"Activation Mode:   {drive.mode}")
+        print(f"Temporary File:    {drive.tmp_fw_file_name}\n\n")
 
         questions = [
             inquirer.Confirm("continue", message="The summary is correct. Continue", default=False)
@@ -422,7 +484,7 @@ def update_fw(
                 "nvme",
                 "download",
                 fw_file.name,
-                device,
+                drive.device,
             ],
             shell=False,
             capture_output=True,
@@ -436,9 +498,9 @@ def update_fw(
                 "sudo",
                 "nvme",
                 "fw-commit",
-                f"-s {slot}",
-                f"-a {mode}",
-                device,
+                f"-s {drive.selected_slot}",
+                f"-a {drive.mode}",
+                drive.device,
             ],
             shell=False,
             capture_output=True,
@@ -470,56 +532,37 @@ def wd_fw_update():
         print("   nvme-cli")
         exit(1)
 
-    # Step 1: Get model number and firmware version
-    device = ask_device()
+    drive = Drive()
 
-    model_properties = get_model_properties(device)
+    # Step 1: Get model number and firmware version
+    ask_device(drive=drive)
 
     # Step 2: Fetch the device list and find the firmware URL
-    model = model_properties["mn"]
+    get_model_properties(drive=drive)
 
-    relative_urls = get_fw_url(model=model)
+    get_fw_url(drive=drive)
 
     # Step 3: Check firmware version and dependencies
-    current_fw_version = model_properties["fr"]
-
-    selected_version = ask_fw_version(
-        device=device,
-        relative_urls=relative_urls,
-        model=model,
-        current_fw_version=current_fw_version,
-    )
+    ask_fw_version(drive=drive)
 
     # Step 4: Check if an upgrade from the current firmware to the new one is supported.
-    firmware_url = get_upgrade_url(
-        current_fw_version=current_fw_version,
-        version=selected_version,
-        model=model,
-    )
+    get_upgrade_url(drive=drive)
+
     # Step 5: Ask for the slot to install the firmware
-    current_slot, slot = ask_slot(device)
+    ask_slot(drive=drive)
 
     # Step 6: Ask for installation mode
-    mode = ask_mode()
+    ask_mode(drive=drive)
 
     # Step 7: Download and install the firmware file
-    result = update_fw(
-        current_fw_version=current_fw_version,
-        version=selected_version,
-        firmware_url=firmware_url,
-        model=model,
-        device=device,
-        current_slot=current_slot,
-        slot=slot,
-        mode=mode,
-    )
+    result = update_fw(drive)
 
     if result:
-        if mode == 0:
+        if drive.mode == 0:
             print("Update complete. Don't forget to switch to the new slot.")
-        elif mode == 1 or mode == 2:
+        elif drive.mode == 1 or drive.mode == 2:
             print("Update complete. Please reboot.")
-        elif mode == 3:
+        elif drive.mode == 3:
             print("Update complete. Switched to the new version.")
     else:
         print("An error happened during the update process.")
@@ -541,6 +584,15 @@ def main(args):
     args = parse_args(args)
     setup_logging(args.loglevel)
     _logger.debug(args)
+
+    if args.info:
+        devices = get_devices()
+        for d in devices:
+            drive = Drive()
+            drive.device = d
+            print_info(drive=drive)
+
+        exit()
 
     wd_fw_update()
 
