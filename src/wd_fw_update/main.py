@@ -50,11 +50,11 @@ def parse_args(args):
     """Parse command line parameters
 
     Args:
-      args (List[str]): command line parameters as list of strings
-          (for example  ``["--help"]``).
+        args (List[str]): command line parameters as list of strings
+             (for example  ``["--help"]``).
 
     Returns:
-      :obj:`argparse.Namespace`: command line parameters namespace
+        :obj:`argparse.Namespace`: command line parameters namespace
     """
     parser = argparse.ArgumentParser(description="Updates the firmware of Western Digital SSDs.")
     parser.add_argument(
@@ -85,6 +85,7 @@ def parse_args(args):
         action="store_const",
         const=logging.INFO,
     )
+
     parser.add_argument(
         "-vv",
         "--very-verbose",
@@ -101,7 +102,7 @@ def setup_logging(loglevel: int) -> None:
     """Setup basic logging
 
     Args:
-      loglevel (int): minimum loglevel for emitting messages
+         loglevel (int): minimum loglevel for emitting messages
     """
     logformat = "[%(asctime)s] %(levelname)s:%(name)s:%(message)s"
     logging.basicConfig(
@@ -116,7 +117,7 @@ def check_missing_dependencies() -> bool:
     """Check for missing dependencies
 
     Returns:
-      is_missing (bool): True if any dependency is missing, False otherwise.
+        is_missing (bool): True if any dependency is missing, False otherwise.
     """
     dependencies = ["sudo", "nvme"]  # List of commands to check
     is_missing = any(which(cmd) is None for cmd in dependencies)
@@ -125,6 +126,7 @@ def check_missing_dependencies() -> bool:
 
 def print_info(drive=None) -> None:
     """Print an overview of the NVME drive."""
+
     get_model_properties(drive=drive)
     print("========== Device Info ==========")
     for k, v in asdict(drive).items():
@@ -138,7 +140,7 @@ def get_devices() -> List[str]:
     """Returns a list of all NVME drives.
 
     Returns:
-      devices (List[str]): List of NVME drives
+        devices (List[str]): List of NVME drives
     """
     _logger.debug("Getting device list.")
 
@@ -156,8 +158,14 @@ def get_devices() -> List[str]:
 def ask_device(drive) -> None:
     """Prompt the user to select an NVME drive for the update.
 
+    Args:
+        drive (Drive): The Drive object.
+
     Returns:
-      device (str): Selected NVME drive
+        None
+
+    Updates:
+        drive.device (str): The selected device path.
     """
 
     devices = get_devices()
@@ -181,7 +189,23 @@ def ask_device(drive) -> None:
 
 
 def get_model_properties(drive) -> None:
-    """Retrieve model properties for the specified NVME device"""
+    """Retrieve model properties for the specified NVME device.
+
+    Args:
+        drive (Drive): The Drive object.
+
+    Returns:
+        None
+
+    Updates:
+        drive.model (str): The selected device path.
+        drive.current_fw_version (str): The current firmware version.
+        drive.slot_1_readonly (bool): Is slot 1 readonly?
+        drive.slot_count (int): How many slots are available.
+        drive.activation_without_reset (bool): Does the drive support fw activation without reset?
+        drive.current_slot (int): The currently active slot.
+        drive.slots_with_firmware (dict): Dictionaly of slots that have a fw installed with its respective version.
+    """
     _logger.info(f"Getting device properties of {drive.device}")
 
     result = subprocess.run(
@@ -242,10 +266,16 @@ def get_model_properties(drive) -> None:
 
 
 def get_fw_url(drive: Drive) -> None:
-    """Fetch firmware URL for the specified model from the device list
+    """Fetch firmware URL for the specified model from the device list.
 
     Args:
-      drive (Drive): The Drive object.
+        drive (Drive): The Drive object.
+
+    Returns:
+        None
+
+    Updates:
+        drive.relative_fw_urls (list): List of all fw properties urls.
     """
     _logger.debug("Getting firmware url.")
 
@@ -263,10 +293,16 @@ def get_fw_url(drive: Drive) -> None:
 
 
 def ask_fw_version(drive) -> None:
-    """Prompt the user to select a firmware version
+    """Prompt the user to select a firmware version.
 
     Args:
-      drive (Drive): The Drive object.
+        drive (Drive): The Drive object.
+
+    Returns:
+        None
+
+    Updates:
+        drive.selected_version (str): Selected firmware version.
     """
     if not drive.relative_fw_urls:
         raise RuntimeError("No Firmware Version to select.")
@@ -305,10 +341,13 @@ def ask_slot(drive) -> None:
     """Prompt the user to select a firmware slot
 
     Args:
-      device (str): NVME device identifier.
+        drive (Drive): The Drive object.
 
     Returns:
-      int, int: Current active firmware slot, selected firmware slot.
+        None
+
+    Updates:
+        drive.selected_slot (int): Selected slot number.
     """
 
     slots = list(range(1, drive.slot_count + 1))
@@ -347,12 +386,19 @@ def ask_slot(drive) -> None:
     drive.selected_slot = slot
 
 
-def ask_mode(drive):
+def ask_mode(drive) -> None:
     """Prompt the user to select the firmware update mode
 
+    Args:
+        drive (Drive): The Drive object.
+
     Returns:
-      int: Selected update mode
+        None
+
+    Updates:
+        drive.mode (int): Selected update mode.
     """
+
     o0 = "0: Downloaded image replaces the image indicated by the Firmware Slot field. This image is not activated."
     o1 = "1: Downloaded image replaces the image indicated by the Firmware Slot field. This image is activated at the next reset."
     o2 = "2: The image indicated by the Firmware Slot field is activated at the next reset."
@@ -378,13 +424,15 @@ def ask_mode(drive):
 
 def get_upgrade_url(drive) -> None:
     """Check if an upgrade from the current firmware to the new one is supported and returns the firmware url.
+
     Args:
-        model (str): Model name.
-        version (str): Firmware version to be installed.
-        current_fw_version (str): Current firmware version.
+        drive (Drive): The Drive object.
 
     Returns:
-        firmware_url (srr): URL to new firmware file.
+        None
+
+    Updates:
+        drive.firmware_url (str): URL to the firmware file.
     """
 
     model = drive.model.replace(" ", "_")
@@ -430,7 +478,6 @@ def update_fw(drive) -> bool:
     Returns:
         success (bool): Success status.
     """
-    # Get FW properties
     _logger.info("Downloading firmware.")
 
     r = requests.get(drive.firmware_url, stream=True)
