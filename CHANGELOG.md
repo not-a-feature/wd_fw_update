@@ -1,4 +1,12 @@
 # Changelog
+
+## Version 2.0.0
+- Improve properties reading using `nvme id-ctrl` instead of relying on `nvme fw-log`
+- Rewrite using a properties object.
+- Add -i flag to print information about the available drives.
+
+**Full Changelog**: [v1.2.2...v2.0.0](https://github.com/not-a-feature/wd_fw_update/compare/v1.2.2...v2.0.0)
+
 ## Version 1.2.2
 - Fix download url.
 - Add http status code test.

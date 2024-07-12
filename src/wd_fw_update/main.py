@@ -67,7 +67,7 @@ def parse_args(args):
         "-i",
         "--info",
         action="store_true",
-        help="Print information about the current ssd, firmware and more.",
+        help="Print information about available drives.",
     )
 
     # parser.add_argument(

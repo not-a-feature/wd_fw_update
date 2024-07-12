@@ -59,10 +59,24 @@ Depending on the update mode, it may prompt you to reboot or switch to the new s
 ## Command-Line Options
 
     --version: Display the version of the firmware update tool.
+    -i, --info: Display information about the available drives.
     -v, --verbose: Set the log level to INFO.
     -vv, --very-verbose: Set the log level to DEBUG.
 
-<!-- pyscaffold-notes -->
+The -i flag will display about the available drives.
+
+Example:
+
+```
+========== Device Info ==========
+Device                   : /dev/nvme0n1
+Model                    : WD_BLACK SN770 500GB
+Current fw version       : 731120WD
+Slot 1 readonly          : False
+Slot count               : 2
+Current slot             : 2
+Slots with firmware      : {1: '731030WD', 2: '731120WD'}
+```
 
 ## Note
 
