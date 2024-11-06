@@ -11,7 +11,6 @@ from typing import List
 
 import inquirer
 import requests
-from tqdm.auto import tqdm
 
 from wd_fw_update import __name__ as package_name
 from wd_fw_update import __version__
@@ -452,7 +451,7 @@ def get_upgrade_url(drive) -> None:
     # Check if current firmware is in dependencies
     if drive.current_fw_version not in dependencies_list:
         print(f"The current firmware version {drive.current_fw_version} is not in the dependency")
-        print(f"list of the new firmware. In order to upgrade to {drive.version}, please")
+        print(f"list of the new firmware. In order to upgrade to {drive.selected_version}, please")
         print(f"upgrade to one of these versions first: {dependencies_list}")
         exit(1)
 
@@ -480,23 +479,23 @@ def update_fw(drive) -> bool:
     """
     _logger.info("Downloading firmware.")
 
-    r = requests.get(drive.firmware_url, stream=True)
-    total_size = int(r.headers.get("content-length", 0))
-
     with NamedTemporaryFile(
         prefix=package_name,
         suffix=".fluf",
         mode="wb",
-    ) as fw_file, tqdm(
-        total=total_size,
-        unit="B",
-        unit_scale=True,
-        unit_divisor=1024,
-    ) as pbar:
+        delete=False,  # Important: Don't delete immediately
+    ) as fw_file:
         drive.tmp_fw_file_name = fw_file.name
-        for data in r.iter_content(1024):
-            pbar.update(len(data))
-            fw_file.write(data)
+
+        try:
+            r = requests.get(drive.firmware_url)
+            r.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+            fw_file.write(r.content)
+
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"Error downloading firmware: {e}")
+            print(f"Error downloading firmware: {e}")
+            exit(1)
 
         _logger.info(f"HTTP Status Code: {r.status_code}")
         if not r.status_code == 200:
@@ -529,15 +528,19 @@ def update_fw(drive) -> bool:
             [
                 "sudo",
                 "nvme",
-                "download",
-                fw_file.name,
+                "fw-download",
                 drive.device,
+                f"--fw={drive.tmp_fw_file_name}",
             ],
             shell=False,
             capture_output=True,
             text=True,
         )
-        _logger.debug(f"NVME Download returncode: {result.returncode}")
+        _logger.debug(result)
+        _logger.info(f"NVME Download returncode: {result.returncode}")
+
+        if not result.returncode == 0:
+            return False
 
         _logger.info("Commiting / Switching to the firmware file.")
         result = subprocess.run(
@@ -545,23 +548,22 @@ def update_fw(drive) -> bool:
                 "sudo",
                 "nvme",
                 "fw-commit",
+                drive.device,
                 f"-s {drive.selected_slot}",
                 f"-a {drive.mode}",
-                drive.device,
             ],
             shell=False,
             capture_output=True,
             text=True,
         )
-        _logger.debug(f"NVME Commit returncode: {result.returncode}")
+        _logger.debug(result)
+        _logger.info(f"NVME Commit returncode: {result.returncode}")
 
     if result.returncode == 0:
-        success = True
+        return True
     else:
         print(result)
-        success = False
-
-    return success
+        return False
 
 
 def wd_fw_update():
