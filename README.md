@@ -86,7 +86,6 @@ information on PyScaffold see https://pyscaffold.org/.
 ## Dependencies
 - [nvme cli](https://github.com/linux-nvme/nvme-cli)
 - [inquirer](https://pypi.org/project/inquirer/)
-- [tqdm](https://pypi.org/project/tqdm/)
 - [requests](https://pypi.org/project/requests/)
 
 ## License
