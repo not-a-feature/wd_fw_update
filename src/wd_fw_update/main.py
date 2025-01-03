@@ -283,9 +283,11 @@ def get_fw_url(drive: Drive) -> None:
     response = requests.get(DEVICE_LIST_URL)
     response.raise_for_status()
 
-    root = ET.fromstring(response.content)
+    xml = response.content.strip()
+    xml = ET.canonicalize(xml, strip_text=True)
+    xml_root = ET.fromstring(xml)
 
-    for device in root.findall("lista_device"):
+    for device in xml_root.findall("lista_device"):
         if device.get("model") == drive.model:
             drive.relative_fw_urls = [u.text for u in device.findall("url")]
             return
