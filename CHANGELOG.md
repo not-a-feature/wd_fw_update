@@ -1,4 +1,10 @@
 # Changelog
+## Version 2.1.0
+- Improve userflow by promting the device, model, ... even when there is only one selection available.
+- Add manual mode to bypass version and dependency checks.
+- Improve handling of malformed xml files.
+
+**Full Changelog**: [v2.0.0...v2.1.0](https://github.com/not-a-feature/wd_fw_update/compare/v2.0.0...v2.1.0)
 
 ## Version 2.0.0
 - Improve properties reading using `nvme id-ctrl` instead of relying on `nvme fw-log`
