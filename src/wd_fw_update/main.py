@@ -69,6 +69,13 @@ def parse_args(args):
         help="Print information about available drives.",
     )
 
+    parser.add_argument(
+        "-m",
+        "--manual",
+        action="store_true",
+        help="Disable version and dependency checks.",
+    )
+
     # parser.add_argument(
     #    "-f",
     #    "--force",
@@ -286,11 +293,13 @@ def get_fw_url(drive: Drive) -> None:
     raise RuntimeError("No Firmware found for this model. Please check your selection / model.")
 
 
-def ask_fw_version(drive) -> None:
-    """Prompt the user to select a firmware version.
+def ask_fw_version(drive, manual_mode: bool) -> None:
+    """Prompt the user to select a firmware version for the given drive.
 
     Args:
-        drive (Drive): The Drive object.
+        drive (Drive): The Drive object for which the firmware is being selected.
+        manual_mode (bool): If True, include all available firmware versions in the selection.
+                            If False, only newer firmware versions than the current one are included.
 
     Returns:
         None
@@ -301,17 +310,23 @@ def ask_fw_version(drive) -> None:
     if not drive.relative_fw_urls:
         raise RuntimeError("No Firmware Version to select.")
 
-    fw_versions = [
-        v
-        for url in drive.relative_fw_urls
-        if not (v := url.split("/")[3]) == drive.current_fw_version
-    ]
-    _logger.debug(f"Firmware versions: {fw_versions}")
+    fw_version_int = drive.current_fw_version.removesuffix("WD")
+
+    fw_versions = []
+    for url in drive.relative_fw_urls:
+        v = url.split("/")[3]
+
+        # Add only versions newer than the current one to the list of available firmwares.
+        if manual_mode or int(fw_version_int) < int(v.removesuffix("WD")):
+            fw_versions.append(v)
+
+    _logger.debug(f"Available Firmware versions: {fw_versions}")
 
     if not fw_versions:
         print_info(drive=drive)
         print("No different / newer firmware version found.")
         print("You are probably already on the latest version.")
+        print("If you believe this is a mistake, run `wd_fw_update -m` to enable manual mode.")
         exit(0)
 
     questions = [
@@ -406,12 +421,13 @@ def ask_mode(drive) -> None:
     drive.mode = mode
 
 
-def get_upgrade_url(drive) -> None:
+def get_upgrade_url(drive, manual_mode: bool) -> None:
     """Check if an upgrade from the current firmware to the new one is supported and returns the firmware url.
 
     Args:
         drive (Drive): The Drive object.
-
+        manual_mode (bool): If True, include all available firmware versions in the selection.
+                            If False, only firmware versions depending on the current one are included.
     Returns:
         None
 
@@ -428,19 +444,23 @@ def get_upgrade_url(drive) -> None:
     response = requests.get(prop_url)
     response.raise_for_status()
 
-    root = ET.fromstring(response.content)
-    dependencies_list = [dep.text for dep in root.findall("dependency")]
+    xml = response.content.strip()
+    xml = ET.canonicalize(xml, strip_text=True)
+    xml_root = ET.fromstring(xml)
+
+    dependencies_list = [dep.text for dep in xml_root.findall("dependency")]
 
     _logger.debug(f"Firmware dependencies: {dependencies_list}")
 
     # Check if current firmware is in dependencies
-    if drive.current_fw_version not in dependencies_list:
+    if (not manual_mode) and (drive.current_fw_version not in dependencies_list):
         print(f"The current firmware version {drive.current_fw_version} is not in the dependency")
         print(f"list of the new firmware. In order to upgrade to {drive.selected_version}, please")
-        print(f"upgrade to one of these versions first: {dependencies_list}")
+        print(f"upgrade to one of these versions first: {dependencies_list}.")
+        print("If you believe this is a mistake, run `wd_fw_update -m` to enable manual mode.")
         exit(1)
 
-    firmware_url = f"{base_url}/{root.findtext('fwfile')}"
+    firmware_url = f"{base_url}/{xml_root.findtext('fwfile')}"
 
     _logger.debug(f"Firmware file url: {firmware_url}\n")
     drive.firmware_url = firmware_url
@@ -551,7 +571,7 @@ def update_fw(drive) -> bool:
         return False
 
 
-def wd_fw_update():
+def wd_fw_update(manual_mode):
     """Updates the firmware of Western Digital SSDs on Ubuntu / Linux Mint.
     The user will be prompted for version / model / slot selection.
     """
@@ -577,10 +597,10 @@ def wd_fw_update():
     get_fw_url(drive=drive)
 
     # Step 3: Check firmware version and dependencies
-    ask_fw_version(drive=drive)
+    ask_fw_version(drive=drive, manual_mode=manual_mode)
 
     # Step 4: Check if an upgrade from the current firmware to the new one is supported.
-    get_upgrade_url(drive=drive)
+    get_upgrade_url(drive=drive, manual_mode=manual_mode)
 
     # Step 5: Ask for the slot to install the firmware
     ask_slot(drive=drive)
@@ -628,7 +648,7 @@ def main(args):
 
         exit()
 
-    wd_fw_update()
+    wd_fw_update(args.manual)
 
     _logger.info("[END of script]")
 
