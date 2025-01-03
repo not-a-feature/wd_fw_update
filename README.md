@@ -60,10 +60,12 @@ Depending on the update mode, it may prompt you to reboot or switch to the new s
 
     --version: Display the version of the firmware update tool.
     -i, --info: Display information about the available drives.
+    -m, --manual: Disable version and dependency checks.
     -v, --verbose: Set the log level to INFO.
     -vv, --very-verbose: Set the log level to DEBUG.
 
-The -i flag will display about the available drives.
+### -i, --info
+The `-i` flag will display about the available drives.
 
 Example:
 
@@ -76,7 +78,15 @@ Slot 1 readonly          : False
 Slot count               : 2
 Current slot             : 2
 Slots with firmware      : {1: '731030WD', 2: '731120WD'}
+
 ```
+
+### -m, --manual
+The `-m` flag enables manual mode, bypassing several checks:
+- Displays all available firmware versions for selection, not just newer ones.
+- Allows selection of firmware versions that do not list the current version as a dependency.
+
+
 
 ## Note
 
