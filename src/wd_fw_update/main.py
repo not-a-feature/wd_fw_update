@@ -169,11 +169,6 @@ def ask_device(drive) -> None:
 
     devices = get_devices()
 
-    if len(devices) == 1:
-        _logger.debug(f"Only one device found: {devices}\n")
-        drive.device = devices[0]
-        return
-
     _logger.debug(f"Asking for device: {devices}\n")
     questions = [
         inquirer.List(
@@ -319,11 +314,6 @@ def ask_fw_version(drive) -> None:
         print("You are probably already on the latest version.")
         exit(0)
 
-    if len(fw_versions) == 1:
-        _logger.debug("Only one firmware to select, skipping user-promt.")
-        drive.selected_version = fw_versions[0]
-        return
-
     questions = [
         inquirer.List(
             "version",
@@ -356,11 +346,6 @@ def ask_slot(drive) -> None:
         slots = slots[1:]
 
     _logger.debug(f"Firmware slots: {slots}")
-
-    if len(slots) == 1:
-        _logger.info("Only one slot to select, skipping user-promt.")
-        drive.selected_slot = slots[0]
-        return
 
     print("Select the slot to which the firmware should be installed.")
 
