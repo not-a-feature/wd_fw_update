@@ -1,4 +1,3 @@
-[![ReadTheDocs](https://readthedocs.org/projects/wd_fw_update/badge/?version=latest)](https://wd-fw-update.readthedocs.io/en/stable/)
 [![PyPI-Server](https://img.shields.io/pypi/v/wd_fw_update.svg)](https://pypi.org/project/wd_fw_update/)
 [![Monthly Downloads](https://pepy.tech/badge/wd_fw_update/month)](https://pepy.tech/project/wd_fw_update)
 
