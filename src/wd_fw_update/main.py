@@ -151,12 +151,31 @@ def get_devices() -> List[str]:
     _logger.debug("Getting device list.")
 
     result = subprocess.run(
-        ["nvme", "list"],
+        ["nvme", "list", "-o", "json"],  # Changed to JSON output
         shell=False,
         capture_output=True,
         text=True,
     )
-    devices = [d.split(" ", 1)[0] for d in result.stdout.split("\n")[2:] if d]
+    devices = []
+    if result.stdout:
+        try:
+            data = json.loads(result.stdout)
+            for device_info in data.get("Devices", []):
+                device_path = device_info.get("DevicePath")
+                if device_path:
+                    # Remove namespace part like "n1" from "/dev/nvme0n1" to get "/dev/nvme0"
+                    # Handles /dev/nvme0n1 -> /dev/nvme0 and /dev/nvme0 -> /dev/nvme0
+                    base_device_path = device_path.split("n", 1)[0] + "n" + device_path.split("n", 1)[1].split("n")[0]
+
+                    # ensure no duplicates
+                    if base_device_path not in devices:
+                         devices.append(base_device_path)
+        except json.JSONDecodeError:
+            _logger.error("Failed to parse JSON output from nvme list.")
+            # Fallback or error handling if needed
+            # For now, return empty list or raise error
+            pass # Keep devices list empty or handle error
+
     _logger.debug(f"Device list: {devices}\n")
     return devices
 
