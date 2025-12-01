@@ -1,4 +1,9 @@
 # Changelog
+## Version 2.2.0
+- Add `--ignore_ssl_errors` to disable ssh certificate check.
+- Add warning message on startup
+**Full Changelog**: [v2.1.0...v2.2.0](https://github.com/not-a-feature/wd_fw_update/compare/v2.1.0...v2.2.0)
+
 ## Version 2.1.0
 - Improve userflow by promting the device, model, ... even when there is only one selection available.
 - Add manual mode to bypass version and dependency checks.
