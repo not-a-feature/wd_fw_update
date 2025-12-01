@@ -7,10 +7,11 @@ import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
 from shutil import which
 from tempfile import NamedTemporaryFile
-from typing import List
+from typing import List, Optional
 
 import inquirer
 import requests
+import urllib3
 
 from wd_fw_update import __name__ as package_name
 from wd_fw_update import __version__
@@ -32,12 +33,12 @@ class Drive:
     device: str = ""
     model: str = ""
     current_fw_version: str = ""
-    slot_1_readonly: bool = None
+    slot_1_readonly: Optional[bool] = None
     slot_count: int = -1
     current_slot: int = -1
     slots_with_firmware: dict = field(default_factory=dict)
     selected_slot: int = -1
-    activation_without_reset: bool = None
+    activation_without_reset: Optional[bool] = None
     relative_fw_urls: List[str] = field(default_factory=list)
     selected_version: str = ""
     firmware_url: str = ""
@@ -74,6 +75,12 @@ def parse_args(args):
         "--manual",
         action="store_true",
         help="Disable version and dependency checks.",
+    )
+
+    parser.add_argument(
+        "--ignore_ssl_errors",
+        action="store_true",
+        help="Ignore HTTPS / SSL errors (e.g. expired certificate).",
     )
 
     # parser.add_argument(
@@ -266,11 +273,12 @@ def get_model_properties(drive) -> None:
     drive.slots_with_firmware = slots_with_firmware
 
 
-def get_fw_url(drive: Drive) -> None:
+def get_fw_url(drive: Drive, ignore_ssl_errors: bool = False) -> None:
     """Fetch firmware URL for the specified model from the device list.
 
     Args:
         drive (Drive): The Drive object.
+        ignore_ssl_errors (bool): Ignore SSL errors.
 
     Returns:
         None
@@ -280,7 +288,7 @@ def get_fw_url(drive: Drive) -> None:
     """
     _logger.debug("Getting firmware url.")
 
-    response = requests.get(DEVICE_LIST_URL)
+    response = requests.get(DEVICE_LIST_URL, verify=not ignore_ssl_errors)
     response.raise_for_status()
 
     xml = response.content.strip()
@@ -423,13 +431,14 @@ def ask_mode(drive) -> None:
     drive.mode = mode
 
 
-def get_upgrade_url(drive, manual_mode: bool) -> None:
+def get_upgrade_url(drive, manual_mode: bool, ignore_ssl_errors: bool = False) -> None:
     """Check if an upgrade from the current firmware to the new one is supported and returns the firmware url.
 
     Args:
         drive (Drive): The Drive object.
         manual_mode (bool): If True, include all available firmware versions in the selection.
                             If False, only firmware versions depending on the current one are included.
+        ignore_ssl_errors (bool): Ignore SSL errors.
     Returns:
         None
 
@@ -443,7 +452,7 @@ def get_upgrade_url(drive, manual_mode: bool) -> None:
 
     _logger.debug(f"Firmware properties url: {prop_url}")
 
-    response = requests.get(prop_url)
+    response = requests.get(prop_url, verify=not ignore_ssl_errors)
     response.raise_for_status()
 
     xml = response.content.strip()
@@ -468,7 +477,7 @@ def get_upgrade_url(drive, manual_mode: bool) -> None:
     drive.firmware_url = firmware_url
 
 
-def update_fw(drive) -> bool:
+def update_fw(drive, ignore_ssl_errors: bool = False) -> bool:
     """Update firmware for the specified NVME device
 
     Args:
@@ -480,6 +489,7 @@ def update_fw(drive) -> bool:
         current_slot (int): Current active firmware slot.
         slot (int): Selected firmware slot.
         mode (int): Selected update mode.
+        ignore_ssl_errors (bool): Ignore SSL errors.
 
     Returns:
         success (bool): Success status.
@@ -495,7 +505,7 @@ def update_fw(drive) -> bool:
         drive.tmp_fw_file_name = fw_file.name
 
         try:
-            r = requests.get(drive.firmware_url)
+            r = requests.get(drive.firmware_url, verify=not ignore_ssl_errors)
             r.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
             fw_file.write(r.content)
 
@@ -573,12 +583,22 @@ def update_fw(drive) -> bool:
         return False
 
 
-def wd_fw_update(manual_mode):
+def wd_fw_update(manual_mode, ignore_ssl_errors=False):
     """Updates the firmware of Western Digital SSDs on Ubuntu / Linux Mint.
     The user will be prompted for version / model / slot selection.
     """
     _logger.info("Starting firmware update process.")
     print("Western Digital SSD Firmware Update Tool\n")
+
+    print("WARNING: The official WDDashboard is EOL since 23.01.2025.")
+    print("This may impact the functionality of this non-official tool.")
+    print(
+        "See: https://support-en.wd.com/app/answers/detailweb/a_id/52335/~/western-digital-dashboard-end-of-support"
+    )
+    print("Hint: to disable ssl certificate checking use the --ignore_ssl_errors flag.\n")
+
+    if ignore_ssl_errors:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     # Step 0: Check dependencies
     if check_missing_dependencies():
@@ -596,13 +616,13 @@ def wd_fw_update(manual_mode):
     # Step 2: Fetch the device list and find the firmware URL
     get_model_properties(drive=drive)
 
-    get_fw_url(drive=drive)
+    get_fw_url(drive=drive, ignore_ssl_errors=ignore_ssl_errors)
 
     # Step 3: Check firmware version and dependencies
     ask_fw_version(drive=drive, manual_mode=manual_mode)
 
     # Step 4: Check if an upgrade from the current firmware to the new one is supported.
-    get_upgrade_url(drive=drive, manual_mode=manual_mode)
+    get_upgrade_url(drive=drive, manual_mode=manual_mode, ignore_ssl_errors=ignore_ssl_errors)
 
     # Step 5: Ask for the slot to install the firmware
     ask_slot(drive=drive)
@@ -611,7 +631,7 @@ def wd_fw_update(manual_mode):
     ask_mode(drive=drive)
 
     # Step 7: Download and install the firmware file
-    result = update_fw(drive)
+    result = update_fw(drive, ignore_ssl_errors=ignore_ssl_errors)
 
     if result:
         if drive.mode == 0:
@@ -650,7 +670,7 @@ def main(args):
 
         exit()
 
-    wd_fw_update(args.manual)
+    wd_fw_update(args.manual, args.ignore_ssl_errors)
 
     _logger.info("[END of script]")
 
