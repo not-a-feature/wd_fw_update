@@ -60,6 +60,7 @@ Depending on the update mode, it may prompt you to reboot or switch to the new s
     --version: Display the version of the firmware update tool.
     -i, --info: Display information about the available drives.
     -m, --manual: Disable version and dependency checks.
+    --ignore_ssl_errors: Disable SSL check.
     -v, --verbose: Set the log level to INFO.
     -vv, --very-verbose: Set the log level to DEBUG.
 
@@ -98,7 +99,7 @@ information on PyScaffold see https://pyscaffold.org/.
 - [requests](https://pypi.org/project/requests/)
 
 ## License
-Copyright (C) 2024 by Jules Kreuer - @not_a_feature
+Copyright (C) 2026 by Jules Kreuer - @not_a_feature and contributers.
 This piece of software is published unter the GNU General Public License v3.0
 TLDR:
 

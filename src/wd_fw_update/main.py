@@ -591,12 +591,10 @@ def wd_fw_update(manual_mode, ignore_ssl_errors=False):
     _logger.info("Starting firmware update process.")
     print("Western Digital SSD Firmware Update Tool\n")
 
-    print("WARNING: The official WDDashboard is EOL since 23.01.2025.")
-    print("This may impact the functionality of this non-official tool.")
     print(
-        "See: https://support-en.wd.com/app/answers/detailweb/a_id/52335/~/western-digital-dashboard-end-of-support"
+        "WARNING: The official WDDashboard is EOL since 23.01.2025 and was transferred to SanDisk."
     )
-    print("Hint: to disable ssl certificate checking use the --ignore_ssl_errors flag.\n")
+    print("This may impact the functionality of this non-official tool.")
 
     if ignore_ssl_errors:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
