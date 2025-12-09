@@ -22,7 +22,8 @@ __license__ = "GPL-3.0-or-later"
 
 _logger = logging.getLogger(__name__)
 
-BASE_WD_DOMAIN = "https://wddashboarddownloads.wdc.com/wdDashboard"
+# Switch to new SanDisk / Western Digital firmware download domain
+BASE_WD_DOMAIN = "https://sddashboarddownloads.sandisk.com/wdDashboard"
 DEVICE_LIST_URL = f"{BASE_WD_DOMAIN}/config/devices/lista_devices.xml"
 
 
