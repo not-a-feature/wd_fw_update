@@ -50,6 +50,11 @@ Run
 wd_fw_update
 ```
 
+### Via nix (does not require prior installation):
+```bash
+nix run github:not-a-feature/wd_fw_update
+```
+
 Follow the on-screen prompts to select the appropriate options for your firmware update.
 The script will guide you through the process, and once completed, it will provide a summary of the update.
 Depending on the update mode, it may prompt you to reboot or switch to the new slot.

@@ -1,9 +1,16 @@
-[build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
-build-backend = "setuptools.build_meta"
+[project]
+name = "wd_fw_update"
+version = "2.3.0"
+description = "Updates the firmware of Western Digital SSDs"
+requires-python = ">=3.8"
+dependencies = [
+    "inquirer >=3,<4",
+    "requests >=2.2,<3"
+]
 
-[tool.setuptools_scm]
-# For smarter version schemes and other configuration options,
-# check out https://github.com/pypa/setuptools_scm
-version_scheme = "no-guess-dev"
+[project.scripts]
+run = "wd_fw_update.main:run"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
