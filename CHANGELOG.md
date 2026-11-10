@@ -1,8 +1,10 @@
 # Changelog
-## Unreleased
+## Version 2.3.1
 - Use controller devices for firmware commands and report firmware-log errors clearly (#16).
 - Fix automatic firmware version checks for alphanumeric revisions such as SN7100 H/M firmware (#21).
 - Find and use `nvme` from `/usr/sbin` or `/sbin` when those directories are absent from `PATH` (#5).
+
+**Full Changelog**: [v2.3.0...v2.3.1](https://github.com/not-a-feature/wd_fw_update/compare/v2.3.0...v2.3.1)
 
 ## Version 2.3.0
 - Update backend location (Thanks to [@jclds139 / Jesse](https://github.com/jclds139))
