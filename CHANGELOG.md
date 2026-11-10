@@ -1,4 +1,7 @@
 # Changelog
+## Unreleased
+- Fix automatic firmware version checks for alphanumeric revisions such as SN7100 H/M firmware (#21).
+
 ## Version 2.3.0
 - Update backend location (Thanks to [@jclds139 / Jesse](https://github.com/jclds139))
 - Uptate warning message on startup

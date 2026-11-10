@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -304,6 +305,18 @@ def get_fw_url(drive: Drive, ignore_ssl_errors: bool = False) -> None:
     raise RuntimeError("No Firmware found for this model. Please check your selection / model.")
 
 
+def firmware_version_key(version: str) -> tuple:
+    """Split a firmware revision into text and numeric parts for natural ordering.
+
+    Compatibility is checked separately against the firmware's dependency list.
+    """
+    version = version.removesuffix("WD")
+    return tuple(
+        (True, int(part)) if part.isdigit() else (False, part)
+        for part in re.findall(r"[0-9]+|[^0-9]+", version)
+    )
+
+
 def ask_fw_version(drive, manual_mode: bool) -> None:
     """Prompt the user to select a firmware version for the given drive.
 
@@ -321,14 +334,14 @@ def ask_fw_version(drive, manual_mode: bool) -> None:
     if not drive.relative_fw_urls:
         raise RuntimeError("No Firmware Version to select.")
 
-    fw_version_int = drive.current_fw_version.removesuffix("WD")
+    current_version_key = firmware_version_key(drive.current_fw_version)
 
     fw_versions = []
     for url in drive.relative_fw_urls:
         v = url.split("/")[3]
 
         # Add only versions newer than the current one to the list of available firmwares.
-        if manual_mode or int(fw_version_int) < int(v.removesuffix("WD")):
+        if manual_mode or current_version_key < firmware_version_key(v):
             fw_versions.append(v)
 
     _logger.debug(f"Available Firmware versions: {fw_versions}")
