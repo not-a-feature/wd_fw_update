@@ -156,10 +156,10 @@ def print_info(drive=None) -> None:
 
 
 def get_devices() -> List[str]:
-    """Returns a list of all NVME drives.
+    """Return one controller device per NVME drive for firmware administration.
 
     Returns:
-        devices (List[str]): List of NVME drives
+        devices (List[str]): List of NVME controller device paths.
     """
     _logger.debug("Getting device list.")
 
@@ -169,7 +169,17 @@ def get_devices() -> List[str]:
         capture_output=True,
         text=True,
     )
-    devices = [d.split(" ", 1)[0] for d in result.stdout.split("\n")[2:] if d]
+    devices = []
+    for line in result.stdout.splitlines()[2:]:
+        if not line.strip():
+            continue
+        device = line.split()[0]
+        # Firmware commands target the controller, not an individual namespace (#16).
+        namespace = re.fullmatch(r"(/dev/nvme[0-9]+)n[0-9]+", device)
+        if namespace:
+            device = namespace.group(1)
+        if device not in devices:
+            devices.append(device)
     _logger.debug(f"Device list: {devices}\n")
     return devices
 
@@ -251,8 +261,23 @@ def get_model_properties(drive) -> None:
     )
     # _logger.debug(result.stdout)
 
-    result = json.loads(result.stdout)
-    result = list(result.values())[0]
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"Unable to read firmware log for {drive.device}: {details}")
+
+    try:
+        firmware_log = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid firmware log JSON for {drive.device}") from exc
+    if isinstance(firmware_log, dict) and "error" in firmware_log:
+        raise RuntimeError(
+            f"Unable to read firmware log for {drive.device}: {firmware_log['error']}"
+        )
+    if not isinstance(firmware_log, dict) or len(firmware_log) != 1:
+        raise RuntimeError(f"Unexpected firmware log format for {drive.device}")
+    result = next(iter(firmware_log.values()))
+    if not isinstance(result, dict) or "Active Firmware Slot (afi)" not in result:
+        raise RuntimeError(f"Unexpected firmware log format for {drive.device}")
 
     """
     From: https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4b-2020.09.21-Ratified.pdf

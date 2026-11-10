@@ -42,7 +42,7 @@ class DependencyTests(unittest.TestCase):
             [], 0, stdout="header\nseparator\n/dev/nvme0n1 model\n"
         )
         with patch.object(main.subprocess, "run", return_value=result) as run:
-            self.assertEqual(main.get_devices(), ["/dev/nvme0n1"])
+            self.assertEqual(main.get_devices(), ["/dev/nvme0"])
         self.assertEqual(run.call_args.args[0], ["/usr/sbin/nvme", "list"])
 
     @patch.object(main, "get_nvme_path", return_value="/usr/sbin/nvme")
@@ -50,7 +50,8 @@ class DependencyTests(unittest.TestCase):
         results = [
             Mock(stdout='{"mn": "WD_BLACK SN7100 4TB", "fr": "7613H0WD", "frmw": 4}'),
             Mock(
-                stdout='{"fw_log": {"Active Firmware Slot (afi)": 1, "Firmware Rev Slot 1": "7613H0WD"}}'
+                returncode=0,
+                stdout='{"fw_log": {"Active Firmware Slot (afi)": 1, "Firmware Rev Slot 1": "7613H0WD"}}',
             ),
         ]
         drive = main.Drive(device="/dev/nvme0n1")

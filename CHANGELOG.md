@@ -1,5 +1,6 @@
 # Changelog
 ## Unreleased
+- Use controller devices for firmware commands and report firmware-log errors clearly (#16).
 - Fix automatic firmware version checks for alphanumeric revisions such as SN7100 H/M firmware (#21).
 - Find and use `nvme` from `/usr/sbin` or `/sbin` when those directories are absent from `PATH` (#5).
 
