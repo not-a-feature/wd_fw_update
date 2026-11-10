@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -128,15 +129,18 @@ def setup_logging(loglevel: int) -> None:
     )
 
 
+def get_nvme_path() -> Optional[str]:
+    """Find nvme on PATH or in standard Linux administration directories."""
+    return which("nvme") or which("nvme", path=os.pathsep.join(("/usr/sbin", "/sbin")))
+
+
 def check_missing_dependencies() -> bool:
     """Check for missing dependencies
 
     Returns:
         is_missing (bool): True if any dependency is missing, False otherwise.
     """
-    dependencies = ["sudo", "nvme"]  # List of commands to check
-    is_missing = any(which(cmd) is None for cmd in dependencies)
-    return is_missing
+    return which("sudo") is None or get_nvme_path() is None
 
 
 def print_info(drive=None) -> None:
@@ -160,7 +164,7 @@ def get_devices() -> List[str]:
     _logger.debug("Getting device list.")
 
     result = subprocess.run(
-        ["nvme", "list"],
+        [get_nvme_path() or "nvme", "list"],
         shell=False,
         capture_output=True,
         text=True,
@@ -219,7 +223,7 @@ def get_model_properties(drive) -> None:
     _logger.info(f"Getting device properties of {drive.device}")
 
     result = subprocess.run(
-        ["sudo", "nvme", "id-ctrl", drive.device, "--output-format=json"],
+        ["sudo", get_nvme_path() or "nvme", "id-ctrl", drive.device, "--output-format=json"],
         shell=False,
         capture_output=True,
         text=True,
@@ -240,7 +244,7 @@ def get_model_properties(drive) -> None:
 
     # Get current active slot
     result = subprocess.run(
-        ["sudo", "nvme", "fw-log", drive.device, "--output-format=json"],
+        ["sudo", get_nvme_path() or "nvme", "fw-log", drive.device, "--output-format=json"],
         shell=False,
         capture_output=True,
         text=True,
@@ -558,7 +562,7 @@ def update_fw(drive, ignore_ssl_errors: bool = False) -> bool:
         result = subprocess.run(
             [
                 "sudo",
-                "nvme",
+                get_nvme_path() or "nvme",
                 "fw-download",
                 drive.device,
                 f"--fw={drive.tmp_fw_file_name}",
@@ -577,7 +581,7 @@ def update_fw(drive, ignore_ssl_errors: bool = False) -> bool:
         result = subprocess.run(
             [
                 "sudo",
-                "nvme",
+                get_nvme_path() or "nvme",
                 "fw-commit",
                 drive.device,
                 f"-s {drive.selected_slot}",

@@ -1,6 +1,7 @@
 # Changelog
 ## Unreleased
 - Fix automatic firmware version checks for alphanumeric revisions such as SN7100 H/M firmware (#21).
+- Find and use `nvme` from `/usr/sbin` or `/sbin` when those directories are absent from `PATH` (#5).
 
 ## Version 2.3.0
 - Update backend location (Thanks to [@jclds139 / Jesse](https://github.com/jclds139))
