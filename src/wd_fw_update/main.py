@@ -1,6 +1,8 @@
 import argparse
 import json
 import logging
+import os
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -127,15 +129,18 @@ def setup_logging(loglevel: int) -> None:
     )
 
 
+def get_nvme_path() -> Optional[str]:
+    """Find nvme on PATH or in standard Linux administration directories."""
+    return which("nvme") or which("nvme", path=os.pathsep.join(("/usr/sbin", "/sbin")))
+
+
 def check_missing_dependencies() -> bool:
     """Check for missing dependencies
 
     Returns:
         is_missing (bool): True if any dependency is missing, False otherwise.
     """
-    dependencies = ["sudo", "nvme"]  # List of commands to check
-    is_missing = any(which(cmd) is None for cmd in dependencies)
-    return is_missing
+    return which("sudo") is None or get_nvme_path() is None
 
 
 def print_info(drive=None) -> None:
@@ -151,20 +156,30 @@ def print_info(drive=None) -> None:
 
 
 def get_devices() -> List[str]:
-    """Returns a list of all NVME drives.
+    """Return one controller device per NVME drive for firmware administration.
 
     Returns:
-        devices (List[str]): List of NVME drives
+        devices (List[str]): List of NVME controller device paths.
     """
     _logger.debug("Getting device list.")
 
     result = subprocess.run(
-        ["nvme", "list"],
+        [get_nvme_path() or "nvme", "list"],
         shell=False,
         capture_output=True,
         text=True,
     )
-    devices = [d.split(" ", 1)[0] for d in result.stdout.split("\n")[2:] if d]
+    devices = []
+    for line in result.stdout.splitlines()[2:]:
+        if not line.strip():
+            continue
+        device = line.split()[0]
+        # Firmware commands target the controller, not an individual namespace (#16).
+        namespace = re.fullmatch(r"(/dev/nvme[0-9]+)n[0-9]+", device)
+        if namespace:
+            device = namespace.group(1)
+        if device not in devices:
+            devices.append(device)
     _logger.debug(f"Device list: {devices}\n")
     return devices
 
@@ -218,7 +233,7 @@ def get_model_properties(drive) -> None:
     _logger.info(f"Getting device properties of {drive.device}")
 
     result = subprocess.run(
-        ["sudo", "nvme", "id-ctrl", drive.device, "--output-format=json"],
+        ["sudo", get_nvme_path() or "nvme", "id-ctrl", drive.device, "--output-format=json"],
         shell=False,
         capture_output=True,
         text=True,
@@ -239,15 +254,30 @@ def get_model_properties(drive) -> None:
 
     # Get current active slot
     result = subprocess.run(
-        ["sudo", "nvme", "fw-log", drive.device, "--output-format=json"],
+        ["sudo", get_nvme_path() or "nvme", "fw-log", drive.device, "--output-format=json"],
         shell=False,
         capture_output=True,
         text=True,
     )
     # _logger.debug(result.stdout)
 
-    result = json.loads(result.stdout)
-    result = list(result.values())[0]
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"Unable to read firmware log for {drive.device}: {details}")
+
+    try:
+        firmware_log = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid firmware log JSON for {drive.device}") from exc
+    if isinstance(firmware_log, dict) and "error" in firmware_log:
+        raise RuntimeError(
+            f"Unable to read firmware log for {drive.device}: {firmware_log['error']}"
+        )
+    if not isinstance(firmware_log, dict) or len(firmware_log) != 1:
+        raise RuntimeError(f"Unexpected firmware log format for {drive.device}")
+    result = next(iter(firmware_log.values()))
+    if not isinstance(result, dict) or "Active Firmware Slot (afi)" not in result:
+        raise RuntimeError(f"Unexpected firmware log format for {drive.device}")
 
     """
     From: https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4b-2020.09.21-Ratified.pdf
@@ -304,6 +334,18 @@ def get_fw_url(drive: Drive, ignore_ssl_errors: bool = False) -> None:
     raise RuntimeError("No Firmware found for this model. Please check your selection / model.")
 
 
+def firmware_version_key(version: str) -> tuple:
+    """Split a firmware revision into text and numeric parts for natural ordering.
+
+    Compatibility is checked separately against the firmware's dependency list.
+    """
+    version = version.removesuffix("WD")
+    return tuple(
+        (True, int(part)) if part.isdigit() else (False, part)
+        for part in re.findall(r"[0-9]+|[^0-9]+", version)
+    )
+
+
 def ask_fw_version(drive, manual_mode: bool) -> None:
     """Prompt the user to select a firmware version for the given drive.
 
@@ -321,14 +363,14 @@ def ask_fw_version(drive, manual_mode: bool) -> None:
     if not drive.relative_fw_urls:
         raise RuntimeError("No Firmware Version to select.")
 
-    fw_version_int = drive.current_fw_version.removesuffix("WD")
+    current_version_key = firmware_version_key(drive.current_fw_version)
 
     fw_versions = []
     for url in drive.relative_fw_urls:
         v = url.split("/")[3]
 
         # Add only versions newer than the current one to the list of available firmwares.
-        if manual_mode or int(fw_version_int) < int(v.removesuffix("WD")):
+        if manual_mode or current_version_key < firmware_version_key(v):
             fw_versions.append(v)
 
     _logger.debug(f"Available Firmware versions: {fw_versions}")
@@ -545,7 +587,7 @@ def update_fw(drive, ignore_ssl_errors: bool = False) -> bool:
         result = subprocess.run(
             [
                 "sudo",
-                "nvme",
+                get_nvme_path() or "nvme",
                 "fw-download",
                 drive.device,
                 f"--fw={drive.tmp_fw_file_name}",
@@ -564,7 +606,7 @@ def update_fw(drive, ignore_ssl_errors: bool = False) -> bool:
         result = subprocess.run(
             [
                 "sudo",
-                "nvme",
+                get_nvme_path() or "nvme",
                 "fw-commit",
                 drive.device,
                 f"-s {drive.selected_slot}",
